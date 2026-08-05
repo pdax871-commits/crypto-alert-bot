@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading Alert Dashboard</title>
-    <!-- Lightweight Charts v3.8.0 Stable CDN -->
     <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
@@ -31,30 +30,29 @@
 
         .action-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--card-bg); color: var(--text-color); cursor: pointer; }
 
-        select, button { padding: 6px 12px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
+        select, button, input { padding: 8px 12px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; }
         
-        /* Container Dimensions Fixed to Guarantee Height */
         .main-container { width: 100vw; height: calc(100vh - 60px); position: relative; display: block; }
-        #chart { width: 100%; height: 100%; display: block; min-height: 400px; }
+        #chart { width: 100%; height: 100%; display: block; }
 
-        /* Modal Overlay for Active Alerts List */
+        /* Custom Modal Overlay */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
-        .modal-content { background-color: var(--card-bg); width: 450px; max-height: 80vh; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .modal-content { background-color: var(--card-bg); width: 420px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
-        .modal-body { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; max-height: 60vh; }
+        .modal-body { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; max-height: 50vh; }
         
         .alert-card { background-color: var(--bg-color); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
         .alert-card .del-btn { background-color: #f6465d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
 
         #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
-        #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 8px 15px; }
+        #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 10px 15px; cursor: pointer; }
     </style>
 </head>
 <body>
 
     <header>
         <div class="top-left">
-            <select id="symbol-select" onchange="loadChartData()">
+            <select id="symbol-select" onchange="loadChartData(true)">
                 <option value="BTCUSDT">BTC/USDT</option>
                 <option value="ETHUSDT">ETH/USDT</option>
                 <option value="SOLUSDT">SOL/USDT</option>
@@ -84,7 +82,7 @@
     <div class="main-container">
         <div id="chart"></div>
         <div id="context-menu">
-            <button onclick="addHorizontalAlertFromMenu()">➕ Set Horizontal Alert Here</button>
+            <button onclick="openAddAlertModal()">➕ Set Horizontal Alert Here</button>
         </div>
     </div>
 
@@ -93,11 +91,31 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h3>Active Horizontal Alerts</h3>
-                <button onclick="closeAlertsModal()" style="padding: 2px 8px;">✕</button>
+                <button onclick="closeModal('alerts-modal')" style="padding: 2px 8px; border:none; cursor:pointer;">✕</button>
             </div>
             <div id="modal-alerts-list" class="modal-body"></div>
             <div style="margin-top: 15px; text-align: right;">
-                <button onclick="clearAllAlerts()" style="background-color: #f6465d; color: white;">Clear All Alerts</button>
+                <button onclick="clearAllAlerts()" style="background-color: #f6465d; color: white; border:none; cursor:pointer;">Clear All Alerts</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Alert UI Modal (Replaces browser alert/prompt) -->
+    <div id="add-alert-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Create Horizontal Alert</h3>
+                <button onclick="closeModal('add-alert-modal')" style="padding: 2px 8px; border:none; cursor:pointer;">✕</button>
+            </div>
+            <div class="modal-body">
+                <label>Price Level:</label>
+                <input type="text" id="alert-price-input" readonly />
+                <label>Custom Message:</label>
+                <input type="text" id="alert-msg-input" placeholder="e.g. Resistance Reached" value="Target Level Reached" />
+            </div>
+            <div style="margin-top: 15px; display:flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="closeModal('add-alert-modal')">Cancel</button>
+                <button onclick="submitAddAlert()" style="background-color: #0ecb81; color: white; border:none;">Set Alert</button>
             </div>
         </div>
     </div>
@@ -110,6 +128,7 @@
         let activeAlerts = [];
         let priceLineMap = {};
         let isDark = true;
+        let isFirstLoad = true;
 
         let isEma920Active = false;
         let isEma200Active = false;
@@ -178,7 +197,6 @@
                 });
             });
 
-            // Right Click Event for Adding Alert
             container.addEventListener('contextmenu', function (e) {
                 e.preventDefault();
                 const menu = document.getElementById('context-menu');
@@ -194,7 +212,7 @@
                 }
             });
 
-            // Left Click on Line to Delete Alert
+            // Direct line click deletion
             chart.subscribeClick((param) => {
                 if (!param.point || !activeAlerts || activeAlerts.length === 0) return;
 
@@ -207,10 +225,7 @@
                 });
 
                 if (matchedAlert) {
-                    const confirmDel = confirm(`Delete Horizontal Alert for ${matchedAlert.symbol} at $${matchedAlert.price}?`);
-                    if (confirmDel) {
-                        deleteSingleAlert(matchedAlert.symbol, matchedAlert.price);
-                    }
+                    deleteSingleAlert(matchedAlert.symbol, matchedAlert.price);
                 }
             });
 
@@ -219,7 +234,7 @@
             });
         }
 
-        async function loadChartData() {
+        async function loadChartData(resetZoom = false) {
             currentSymbol = document.getElementById('symbol-select').value;
 
             try {
@@ -248,7 +263,11 @@
                     ema20Series.setData(ema20);
                     ema200Series.setData(ema200);
 
-                    chart.timeScale().fitContent();
+                    // FIX: fitContent only runs once on load or manual symbol change, keeping zoom level locked
+                    if (isFirstLoad || resetZoom) {
+                        chart.timeScale().fitContent();
+                        isFirstLoad = false;
+                    }
 
                     checkTechnicalAlerts(candles, ema9, ema20, ema200);
                 }
@@ -270,7 +289,6 @@
             const prevEma20 = ema20[ema20.length - 2].value;
             const currEma200 = ema200[ema200.length - 1].value;
 
-            // 1. EMA 9-20 Cross
             if (isEma920Active) {
                 if (prevEma9 <= prevEma20 && currEma9 > currEma20) {
                     triggerInstantAlert(currentSymbol, currCandle.close, `🚨 9-20 EMA BULLISH CROSSOVER (${currentTF})`);
@@ -279,7 +297,6 @@
                 }
             }
 
-            // 2. 200 EMA Touch
             if (isEma200Active) {
                 if (currCandle.low <= currEma200 && currCandle.high >= currEma200) {
                     if (currCandle.time !== lastEma200TouchedTime) {
@@ -300,7 +317,7 @@
 
         function changeTF(tf) {
             currentTF = tf;
-            loadChartData();
+            loadChartData(true);
         }
 
         function toggleAlertState(type) {
@@ -323,38 +340,43 @@
             }
         }
 
-        async function addHorizontalAlertFromMenu() {
+        function openAddAlertModal() {
             if (!clickedPrice) return;
-            const msg = prompt(`Enter custom note for ${currentSymbol} at $${clickedPrice}:`, "Target Level Reached");
-            if (!msg) return;
+            document.getElementById('alert-price-input').value = clickedPrice;
+            document.getElementById('add-alert-modal').style.display = 'flex';
+        }
+
+        async function submitAddAlert() {
+            const price = parseFloat(document.getElementById('alert-price-input').value);
+            const msg = document.getElementById('alert-msg-input').value || "Target Level Reached";
 
             await fetch('/api/add_alert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: currentSymbol, price: parseFloat(clickedPrice), message: msg })
+                body: JSON.stringify({ symbol: currentSymbol, price: price, message: msg })
             });
 
+            closeModal('add-alert-modal');
             fetchServerAlerts();
         }
 
         async function deleteSingleAlert(symbol, price) {
-            await triggerInstantAlert(symbol, price, "Manually Deleted");
+            await triggerInstantAlert(symbol, price, "Alert Removed");
             fetchServerAlerts();
         }
 
         async function clearAllAlerts() {
-            if (confirm("Are you sure you want to clear all active alerts?")) {
-                await fetch('/api/clear_alerts', { method: 'POST' });
-                fetchServerAlerts();
-            }
+            await fetch('/api/clear_alerts', { method: 'POST' });
+            closeModal('alerts-modal');
+            fetchServerAlerts();
         }
 
         function openAlertsModal() {
             document.getElementById('alerts-modal').style.display = 'flex';
         }
 
-        function closeAlertsModal() {
-            document.getElementById('alerts-modal').style.display = 'none';
+        function closeModal(id) {
+            document.getElementById(id).style.display = 'none';
         }
 
         async function fetchServerAlerts() {
@@ -414,10 +436,10 @@
         window.onload = async () => {
             initChart();
             await fetchServerAlerts();
-            await loadChartData();
+            await loadChartData(true);
             
             setInterval(() => {
-                loadChartData();
+                loadChartData(false);
                 fetchServerAlerts();
             }, 5000);
         };
