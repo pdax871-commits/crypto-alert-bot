@@ -1,7 +1,8 @@
 fastapi
 uvicorn
 requests
-pandas>=2.0.0,<3.0.0
 jinja2
 pydantic
-https://github.com/twopirllc/pandas-ta/archive/refs/heads/main.zip
+numpy<2.0.0
+pandas>=1.5.0,<2.2.0
+pandas-ta
