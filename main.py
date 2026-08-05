@@ -14,7 +14,7 @@ templates = Jinja2Templates(directory="templates")
 
 http_session = requests.Session()
 http_session.headers.update({
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) TradingAlertBot/2.0"
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 })
 
 TELEGRAM_BOT_TOKEN = "YOUR_TELEGRAM_BOT_TOKEN"
@@ -117,16 +117,18 @@ async def async_send_telegram_msg(msg: str):
     await loop.run_in_executor(None, _send)
 
 def fetch_klines(symbol: str, interval: str, limit: int = 250) -> pd.DataFrame:
-    endpoints = [
+    # 1. Binance Spot & Futures Endpoints
+    urls = [
         f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
+        f"https://fapi.binance.com/fapi/v1/klines?symbol={symbol}&interval={interval}&limit={limit}",
         f"https://api1.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
         f"https://api2.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
-        f"https://api3.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+        f"https://api3.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
     ]
-    
-    for url in endpoints:
+
+    for url in urls:
         try:
-            res = http_session.get(url, timeout=5).json()
+            res = http_session.get(url, timeout=4).json()
             if isinstance(res, list) and len(res) > 0:
                 df = pd.DataFrame(res, columns=[
                     'timestamp', 'open', 'high', 'low', 'close', 'volume',
@@ -137,9 +139,33 @@ def fetch_klines(symbol: str, interval: str, limit: int = 250) -> pd.DataFrame:
                 df['low'] = df['low'].astype(float)
                 df['close'] = df['close'].astype(float)
                 return df
-        except Exception as e:
+        except Exception:
             continue
+
+    # 2. Fallback: Bybit Public API (If Binance blocks Cloud Server IP)
+    try:
+        bybit_tf_map = {"1m": "1", "5m": "5", "15m": "15", "1h": "60", "4h": "240"}
+        bybit_tf = bybit_tf_map.get(interval, "15")
+        bybit_url = f"https://api.bybit.com/v5/market/kline?category=spot&symbol={symbol}&interval={bybit_tf}&limit={limit}"
+        
+        res = http_session.get(bybit_url, timeout=4).json()
+        if res.get("retCode") == 0 and "list" in res.get("result", {}):
+            raw_list = res["result"]["list"]
+            raw_list.reverse()
             
+            records = []
+            for item in raw_list:
+                records.append({
+                    'timestamp': float(item[0]),
+                    'open': float(item[1]),
+                    'high': float(item[2]),
+                    'low': float(item[3]),
+                    'close': float(item[4]),
+                })
+            return pd.DataFrame(records)
+    except Exception as e:
+        print(f"Bybit Fallback Error: {e}")
+
     return pd.DataFrame()
 
 async def background_alert_scanner():
