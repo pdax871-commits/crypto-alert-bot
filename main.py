@@ -25,10 +25,14 @@ def save_alerts(alerts):
     except: pass
 
 def send_telegram_alert(msg):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID: return
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID: 
+        print(f"[TELEGRAM NOT CONFIGURED]: {msg}")
+        return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try: requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=5)
-    except: pass
+    try: 
+        requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=5)
+    except Exception as e:
+        print(f"Telegram Error: {e}")
 
 def process_active_alerts():
     alerts = load_alerts()
@@ -63,7 +67,7 @@ def process_active_alerts():
                         break
                 
                 if hit:
-                    msg = f"🚨 *BACKGROUND ALERT TRIGGERED!*\n\nCoin: *{sym}*\nTarget Hit: *${target:.4f}*\n📝 *{a.get('message', 'Level Reached')}*"
+                    msg = f"🔔 *HORIZONTAL ALERT TRIGGERED!*\n\nCoin: *{sym}*\nTarget Hit: *${target:.4f}*\n📝 *{a.get('message', 'Level Reached')}*"
                     send_telegram_alert(msg)
                     triggered_any = True
                 else:
@@ -78,14 +82,11 @@ def process_active_alerts():
         
     return remaining
 
-# 🌐 API ENDPOINTS
-
 @app.route('/ping')
 def ping():
     remaining = process_active_alerts()
     return jsonify({"status": "awake", "active_alerts": len(remaining)})
 
-# 🛡️ CORS FIX: Backend Proxy for MEXC Klines
 @app.route('/api/klines')
 def get_klines():
     symbol = request.args.get('symbol', 'BTCUSDT').upper()
@@ -106,6 +107,7 @@ def get_klines():
 
 @app.route('/api/get_alerts', methods=['GET'])
 def get_alerts():
+    process_active_alerts()
     return jsonify(load_alerts())
 
 @app.route('/')
@@ -135,7 +137,7 @@ def trigger_alert():
     price = float(data.get('price', 0))
     msg = data.get('message', '')
 
-    telegram_msg = f"🚨 *INSTANT ALERT!*\n\nCoin: *{sym}*\nPrice: *${price:.4f}*\n📝 *{msg}*"
+    telegram_msg = f"🚨 *ALERT TRIGGERED!*\n\nCoin: *{sym}*\nPrice: *${price:.4f}*\n📝 *{msg}*"
     send_telegram_alert(telegram_msg)
     
     alerts = load_alerts()
