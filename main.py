@@ -191,9 +191,10 @@ async def startup_event():
     SYSTEM_STATE["horizontal_alerts"] = load_alerts_from_db()
     asyncio.create_task(background_alert_scanner())
 
+
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+    return templates.TemplateResponse(request=request, name="index.html")
 
 @app.get("/api/klines")
 def get_klines(symbol: str = "BTCUSDT", interval: str = "15m"):
