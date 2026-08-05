@@ -117,23 +117,30 @@ async def async_send_telegram_msg(msg: str):
     await loop.run_in_executor(None, _send)
 
 def fetch_klines(symbol: str, interval: str, limit: int = 250) -> pd.DataFrame:
-    url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
-    try:
-        res = http_session.get(url, timeout=5).json()
-        if not isinstance(res, list):
-            return pd.DataFrame()
-        df = pd.DataFrame(res, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'qav', 'num_trades', 'tb_base', 'tb_quote', 'ignore'
-        ])
-        df['open'] = df['open'].astype(float)
-        df['high'] = df['high'].astype(float)
-        df['low'] = df['low'].astype(float)
-        df['close'] = df['close'].astype(float)
-        return df
-    except Exception as e:
-        print(f"Fetch Error ({symbol} {interval}): {e}")
-        return pd.DataFrame()
+    endpoints = [
+        f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
+        f"https://api1.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
+        f"https://api2.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}",
+        f"https://api3.binance.com/api/v3/klines?symbol={symbol}&interval={interval}&limit={limit}"
+    ]
+    
+    for url in endpoints:
+        try:
+            res = http_session.get(url, timeout=5).json()
+            if isinstance(res, list) and len(res) > 0:
+                df = pd.DataFrame(res, columns=[
+                    'timestamp', 'open', 'high', 'low', 'close', 'volume',
+                    'close_time', 'qav', 'num_trades', 'tb_base', 'tb_quote', 'ignore'
+                ])
+                df['open'] = df['open'].astype(float)
+                df['high'] = df['high'].astype(float)
+                df['low'] = df['low'].astype(float)
+                df['close'] = df['close'].astype(float)
+                return df
+        except Exception as e:
+            continue
+            
+    return pd.DataFrame()
 
 async def background_alert_scanner():
     while True:
