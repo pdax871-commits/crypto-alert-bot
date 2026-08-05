@@ -125,46 +125,71 @@
             });
         }
 
-        function initChart() {
-            const container = document.getElementById('chart');
-            chart = LightweightCharts.createChart(container, {
-                width: container.clientWidth,
-                height: container.clientHeight,
-                layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
-                grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
-                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-                timeScale: { timeVisible: true, secondsVisible: false }
-            });
+      function initChart() {
+    const container = document.getElementById('chart');
+    
+    const chartHeight = container.clientHeight || (window.innerHeight - 60);
+    const chartWidth = container.clientWidth || window.innerWidth;
 
-            candlestickSeries = chart.addCandlestickSeries({ upColor: '#0ecb81', downColor: '#f6465d' });
-            ema9Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
-            ema20Series = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
-            ema200Series = chart.addLineSeries({ color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
+    chart = LightweightCharts.createChart(container, {
+        width: chartWidth,
+        height: chartHeight,
+        layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
+        grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+        timeScale: { timeVisible: true, secondsVisible: false }
+    });
 
-            // Auto Resize Chart on Window Change
-            window.addEventListener('resize', () => {
-                chart.applyOptions({
-                    width: container.clientWidth,
-                    height: container.clientHeight
-                });
-            });
+    // --- FIX FOR VERSION 4.x SYNTAX ---
+    candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, { 
+        upColor: '#0ecb81', 
+        downColor: '#f6465d',
+        borderVisible: false,
+        wickUpColor: '#0ecb81',
+        wickDownColor: '#f6465d'
+    });
 
-            container.addEventListener('contextmenu', function (e) {
-                e.preventDefault();
-                const menu = document.getElementById('context-menu');
-                menu.style.display = 'block';
-                menu.style.left = e.clientX + 'px';
-                menu.style.top = e.clientY + 'px';
-                
-                const coordinate = chart.priceScale('right').coordinateToPrice(e.offsetY);
-                clickedPrice = coordinate ? coordinate.toFixed(2) : null;
-            });
+    ema9Series = chart.addSeries(LightweightCharts.LineSeries, { 
+        color: '#2962ff', 
+        lineWidth: 1, 
+        title: 'EMA 9' 
+    });
 
-            document.addEventListener('click', () => {
-                document.getElementById('context-menu').style.display = 'none';
-            });
-        }
+    ema20Series = chart.addSeries(LightweightCharts.LineSeries, { 
+        color: '#ff9800', 
+        lineWidth: 1, 
+        title: 'EMA 20' 
+    });
 
+    ema200Series = chart.addSeries(LightweightCharts.LineSeries, { 
+        color: '#e91e63', 
+        lineWidth: 2, 
+        title: 'EMA 200' 
+    });
+
+    // Auto Resize Chart on Window Change
+    window.addEventListener('resize', () => {
+        chart.applyOptions({
+            width: container.clientWidth,
+            height: container.clientHeight || (window.innerHeight - 60)
+        });
+    });
+
+    container.addEventListener('contextmenu', function (e) {
+        e.preventDefault();
+        const menu = document.getElementById('context-menu');
+        menu.style.display = 'block';
+        menu.style.left = e.clientX + 'px';
+        menu.style.top = e.clientY + 'px';
+        
+        const coordinate = chart.priceScale('right').coordinateToPrice(e.offsetY);
+        clickedPrice = coordinate ? coordinate.toFixed(2) : null;
+    });
+
+    document.addEventListener('click', () => {
+        document.getElementById('context-menu').style.display = 'none';
+    });
+}
         async function loadChartData() {
             currentSymbol = document.getElementById('symbol-select').value;
             const res = await fetch(`/api/klines?symbol=${currentSymbol}&interval=${currentTF}`);
