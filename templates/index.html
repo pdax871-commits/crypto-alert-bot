@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading Alert Dashboard</title>
-    <!-- Lightweight Charts v4 CDN -->
-    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Lightweight Charts v4.0.1 Locked CDN -->
+    <script src="https://unpkg.com/lightweight-charts@4.0.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg-color: #131722;
@@ -36,7 +36,6 @@
         .main-container { width: 100vw; height: calc(100vh - 60px); position: relative; }
         #chart { width: 100%; height: 100%; display: block; }
 
-        /* Active Alerts Modal */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background-color: var(--card-bg); width: 450px; max-height: 80vh; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -87,7 +86,6 @@
         </div>
     </div>
 
-    <!-- Active Alerts Modal -->
     <div id="alerts-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -125,34 +123,23 @@
         function initChart() {
             const container = document.getElementById('chart');
             
-            const w = container.clientWidth || window.innerWidth;
-            const h = container.clientHeight || (window.innerHeight - 60);
-
             chart = LightweightCharts.createChart(container, {
-                width: w,
-                height: h,
+                width: container.clientWidth || window.innerWidth,
+                height: container.clientHeight || (window.innerHeight - 60),
                 layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
                 grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
                 timeScale: { timeVisible: true, secondsVisible: false }
             });
 
-            // Safe fallback for series addition (supports both v3 and v4 syntax)
-            if (typeof chart.addSeries === 'function') {
-                candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
-                    upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false, wickUpColor: '#0ecb81', wickDownColor: '#f6465d'
-                });
-                ema9Series = chart.addSeries(LightweightCharts.LineSeries, { color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
-                ema20Series = chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
-                ema200Series = chart.addSeries(LightweightCharts.LineSeries, { color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
-            } else {
-                candlestickSeries = chart.addCandlestickSeries({
-                    upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false, wickUpColor: '#0ecb81', wickDownColor: '#f6465d'
-                });
-                ema9Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
-                ema20Series = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
-                ema200Series = chart.addLineSeries({ color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
-            }
+            // V4 direct series creation
+            candlestickSeries = chart.addCandlestickSeries({
+                upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false, wickUpColor: '#0ecb81', wickDownColor: '#f6465d'
+            });
+
+            ema9Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
+            ema20Series = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
+            ema200Series = chart.addLineSeries({ color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
 
             window.addEventListener('resize', () => {
                 chart.applyOptions({
