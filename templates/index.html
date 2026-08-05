@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading Alert Dashboard</title>
-    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <!-- Lightweight Charts v4 CDN -->
+    <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg-color: #131722;
@@ -17,10 +19,10 @@
             --card-bg: #f0f3fa;
             --border-color: #e0e3eb;
         }
-        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif; }
-        body { background-color: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); color: var(--text-color); }
         
-        header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); }
+        header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); height: 60px; }
         .top-left, .top-right, .top-center { display: flex; align-items: center; gap: 12px; }
         
         .status-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; color: white; transition: 0.3s; }
@@ -31,10 +33,10 @@
 
         select, button { padding: 6px 12px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
         
-        .main-container { flex: 1; position: relative; width: 100%; height: calc(100vh - 60px); }
-        #chart { width: 100%; height: 100%; }
+        .main-container { width: 100vw; height: calc(100vh - 60px); position: relative; }
+        #chart { width: 100%; height: 100%; display: block; }
 
-        /* Modal Styles for Active Alerts */
+        /* Active Alerts Modal */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background-color: var(--card-bg); width: 450px; max-height: 80vh; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -58,7 +60,6 @@
                 <option value="BNBUSDT">BNB/USDT</option>
             </select>
             
-            <!-- Requirement 2: Timeframe Dropdown -->
             <select id="tf-select" onchange="changeTF(this.value)">
                 <option value="1m">1m</option>
                 <option value="5m">5m</option>
@@ -69,13 +70,11 @@
         </div>
 
         <div class="top-center">
-            <!-- Requirement 4: By Default OFF (Red) -->
             <button id="ema-9-20-btn" class="status-btn inactive" onclick="toggleAlert('ema_9_20')">9-20 EMA Cross Alert</button>
             <button id="ema-200-btn" class="status-btn inactive" onclick="toggleAlert('ema_200')">200 EMA Touch Alert</button>
         </div>
 
         <div class="top-right">
-            <!-- Requirement 3: Active Alerts Modal Trigger Button -->
             <button class="action-btn" onclick="openAlertsModal()">🔔 Active Alerts</button>
             <button onclick="toggleTheme()">Theme 🌗</button>
         </div>
@@ -95,9 +94,7 @@
                 <h3>Active Horizontal Alerts</h3>
                 <button onclick="closeAlertsModal()" style="padding: 2px 8px;">✕</button>
             </div>
-            <div id="modal-alerts-list" class="modal-body">
-                <!-- Alerts rendered here -->
-            </div>
+            <div id="modal-alerts-list" class="modal-body"></div>
         </div>
     </div>
 
@@ -125,81 +122,81 @@
             });
         }
 
-      function initChart() {
-    const container = document.getElementById('chart');
-    
-    const chartHeight = container.clientHeight || (window.innerHeight - 60);
-    const chartWidth = container.clientWidth || window.innerWidth;
+        function initChart() {
+            const container = document.getElementById('chart');
+            
+            const w = container.clientWidth || window.innerWidth;
+            const h = container.clientHeight || (window.innerHeight - 60);
 
-    chart = LightweightCharts.createChart(container, {
-        width: chartWidth,
-        height: chartHeight,
-        layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
-        grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
-        crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-        timeScale: { timeVisible: true, secondsVisible: false }
-    });
+            chart = LightweightCharts.createChart(container, {
+                width: w,
+                height: h,
+                layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                timeScale: { timeVisible: true, secondsVisible: false }
+            });
 
-    // --- FIX FOR VERSION 4.x SYNTAX ---
-    candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, { 
-        upColor: '#0ecb81', 
-        downColor: '#f6465d',
-        borderVisible: false,
-        wickUpColor: '#0ecb81',
-        wickDownColor: '#f6465d'
-    });
+            // Safe fallback for series addition (supports both v3 and v4 syntax)
+            if (typeof chart.addSeries === 'function') {
+                candlestickSeries = chart.addSeries(LightweightCharts.CandlestickSeries, {
+                    upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false, wickUpColor: '#0ecb81', wickDownColor: '#f6465d'
+                });
+                ema9Series = chart.addSeries(LightweightCharts.LineSeries, { color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
+                ema20Series = chart.addSeries(LightweightCharts.LineSeries, { color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
+                ema200Series = chart.addSeries(LightweightCharts.LineSeries, { color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
+            } else {
+                candlestickSeries = chart.addCandlestickSeries({
+                    upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false, wickUpColor: '#0ecb81', wickDownColor: '#f6465d'
+                });
+                ema9Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
+                ema20Series = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
+                ema200Series = chart.addLineSeries({ color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
+            }
 
-    ema9Series = chart.addSeries(LightweightCharts.LineSeries, { 
-        color: '#2962ff', 
-        lineWidth: 1, 
-        title: 'EMA 9' 
-    });
+            window.addEventListener('resize', () => {
+                chart.applyOptions({
+                    width: container.clientWidth || window.innerWidth,
+                    height: container.clientHeight || (window.innerHeight - 60)
+                });
+            });
 
-    ema20Series = chart.addSeries(LightweightCharts.LineSeries, { 
-        color: '#ff9800', 
-        lineWidth: 1, 
-        title: 'EMA 20' 
-    });
+            container.addEventListener('contextmenu', function (e) {
+                e.preventDefault();
+                const menu = document.getElementById('context-menu');
+                menu.style.display = 'block';
+                menu.style.left = e.clientX + 'px';
+                menu.style.top = e.clientY + 'px';
+                
+                try {
+                    const coord = candlestickSeries.coordinateToPrice(e.offsetY);
+                    clickedPrice = coord ? coord.toFixed(2) : null;
+                } catch (err) {
+                    clickedPrice = null;
+                }
+            });
 
-    ema200Series = chart.addSeries(LightweightCharts.LineSeries, { 
-        color: '#e91e63', 
-        lineWidth: 2, 
-        title: 'EMA 200' 
-    });
+            document.addEventListener('click', () => {
+                document.getElementById('context-menu').style.display = 'none';
+            });
+        }
 
-    // Auto Resize Chart on Window Change
-    window.addEventListener('resize', () => {
-        chart.applyOptions({
-            width: container.clientWidth,
-            height: container.clientHeight || (window.innerHeight - 60)
-        });
-    });
-
-    container.addEventListener('contextmenu', function (e) {
-        e.preventDefault();
-        const menu = document.getElementById('context-menu');
-        menu.style.display = 'block';
-        menu.style.left = e.clientX + 'px';
-        menu.style.top = e.clientY + 'px';
-        
-         const coordinate = candlestickSeries.coordinateToPrice(e.offsetY);
-clickedPrice = coordinate ? coordinate.toFixed(2) : null;
-
-    });
-        
-    document.addEventListener('click', () => {
-        document.getElementById('context-menu').style.display = 'none';
-    });
-}
         async function loadChartData() {
             currentSymbol = document.getElementById('symbol-select').value;
-            const res = await fetch(`/api/klines?symbol=${currentSymbol}&interval=${currentTF}`);
-            const data = await res.json();
+            try {
+                const res = await fetch(`/api/klines?symbol=${currentSymbol}&interval=${currentTF}`);
+                const data = await res.json();
 
-            candlestickSeries.setData(data.candles);
-            ema9Series.setData(data.ema9);
-            ema20Series.setData(data.ema20);
-            ema200Series.setData(data.ema200);
+                if (data.candles && data.candles.length > 0) {
+                    candlestickSeries.setData(data.candles);
+                    ema9Series.setData(data.ema9 || []);
+                    ema20Series.setData(data.ema20 || []);
+                    ema200Series.setData(data.ema200 || []);
+                    chart.timeScale().fitContent();
+                }
+            } catch (e) {
+                console.error("Error loading chart data:", e);
+            }
 
             refreshPriceLines();
         }
@@ -252,7 +249,6 @@ clickedPrice = coordinate ? coordinate.toFixed(2) : null;
             fetchSystemState();
         }
 
-        // Modal Controls
         function openAlertsModal() {
             document.getElementById('alerts-modal').style.display = 'flex';
         }
@@ -262,37 +258,43 @@ clickedPrice = coordinate ? coordinate.toFixed(2) : null;
         }
 
         async function fetchSystemState() {
-            const res = await fetch('/api/system-state');
-            systemState = await res.json();
+            try {
+                const res = await fetch('/api/system-state');
+                systemState = await res.json();
 
-            updateButtonUI(document.getElementById('ema-9-20-btn'), systemState.ema_9_20_active);
-            updateButtonUI(document.getElementById('ema-200-btn'), systemState.ema_200_active);
+                updateButtonUI(document.getElementById('ema-9-20-btn'), systemState.ema_9_20_active);
+                updateButtonUI(document.getElementById('ema-200-btn'), systemState.ema_200_active);
 
-            const modalAlertsContainer = document.getElementById('modal-alerts-list');
-            modalAlertsContainer.innerHTML = '';
+                const modalAlertsContainer = document.getElementById('modal-alerts-list');
+                modalAlertsContainer.innerHTML = '';
 
-            if (systemState.horizontal_alerts.length === 0) {
-                modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
-            } else {
-                systemState.horizontal_alerts.forEach(alert => {
-                    const item = document.createElement('div');
-                    item.className = 'alert-card';
-                    item.innerHTML = `
-                        <div>
-                            <strong>${alert.symbol}</strong> @ $${alert.price}<br/>
-                            <small>${alert.message}</small>
-                        </div>
-                        <button class="del-btn" onclick="deleteAlert(${alert.id})">Delete</button>
-                    `;
-                    modalAlertsContainer.appendChild(item);
-                });
+                if (!systemState.horizontal_alerts || systemState.horizontal_alerts.length === 0) {
+                    modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
+                } else {
+                    systemState.horizontal_alerts.forEach(alert => {
+                        const item = document.createElement('div');
+                        item.className = 'alert-card';
+                        item.innerHTML = `
+                            <div>
+                                <strong>${alert.symbol}</strong> @ $${alert.price}<br/>
+                                <small>${alert.message}</small>
+                            </div>
+                            <button class="del-btn" onclick="deleteAlert(${alert.id})">Delete</button>
+                        `;
+                        modalAlertsContainer.appendChild(item);
+                    });
+                }
+
+                refreshPriceLines();
+            } catch (e) {
+                console.error("Error fetching system state:", e);
             }
-
-            refreshPriceLines();
         }
 
         function refreshPriceLines() {
-            Object.values(priceLineMap).forEach(line => candlestickSeries.removePriceLine(line));
+            Object.values(priceLineMap).forEach(line => {
+                try { candlestickSeries.removePriceLine(line); } catch(e){}
+            });
             priceLineMap = {};
 
             if (systemState.horizontal_alerts) {
