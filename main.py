@@ -145,6 +145,18 @@ def trigger_alert():
     save_alerts(alerts)
     return jsonify({"status": "triggered"})
 
+# Silent Manual Deletion (No Telegram Notification)
+@app.route('/api/delete_alert', methods=['POST'])
+def delete_alert():
+    data = request.json
+    sym = data.get('symbol', '').upper()
+    price = float(data.get('price', 0))
+
+    alerts = load_alerts()
+    alerts = [a for a in alerts if not (a['symbol'].lower() == sym.lower() and abs(float(a['price']) - price) < 0.0001)]
+    save_alerts(alerts)
+    return jsonify({"status": "deleted"})
+
 @app.route('/api/clear_alerts', methods=['POST'])
 def clear_alerts():
     save_alerts([])
