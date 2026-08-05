@@ -80,9 +80,10 @@ def db_mark_triggered(alert_id: int):
     conn.commit()
     conn.close()
 
+# BY DEFAULT OFF (False)
 SYSTEM_STATE = {
-    "ema_9_20_active": True,
-    "ema_200_active": True,
+    "ema_9_20_active": False,
+    "ema_200_active": False,
     "instruments": ["BTCUSDT", "ETHUSDT", "SOLUSDT", "BNBUSDT"],
     "timeframes": ["1m", "5m", "15m", "1h", "4h"],
     "horizontal_alerts": []
@@ -190,7 +191,6 @@ async def startup_event():
     init_db()
     SYSTEM_STATE["horizontal_alerts"] = load_alerts_from_db()
     asyncio.create_task(background_alert_scanner())
-
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_dashboard(request: Request):
