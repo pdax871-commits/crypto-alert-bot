@@ -4,4 +4,4 @@ requests
 pandas>=2.0.0,<3.0.0
 jinja2
 pydantic
-git+https://github.com/twopirllc/pandas-ta.git@development
+https://github.com/twopirllc/pandas-ta/archive/refs/heads/main.zip
