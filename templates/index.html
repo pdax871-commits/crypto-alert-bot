@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Trading Alert Dashboard</title>
+    <script src="https://unpkg.com/lightweight-charts/dist/lightweight-charts.standalone.production.js"></script>
+    <style>
+        :root {
+            --bg-color: #131722;
+            --text-color: #d1d4dc;
+            --card-bg: #1e222d;
+            --border-color: #2a2e39;
+        }
+        body.light-theme {
+            --bg-color: #ffffff;
+            --text-color: #131722;
+            --card-bg: #f0f3fa;
+            --border-color: #e0e3eb;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+        
+        header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); }
+        .top-left, .top-right, .top-center { display: flex; align-items: center; gap: 10px; }
+        
+        .status-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; color: white; transition: 0.3s; }
+        .status-btn.active { background-color: #0ecb81; }
+        .status-btn.inactive { background-color: #f6465d; }
+
+        select, button { padding: 6px 12px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
+        
+        .main-container { display: flex; flex: 1; height: calc(100vh - 60px); }
+        #chart-wrapper { flex: 3; position: relative; border-right: 1px solid var(--border-color); }
+        #chart { width: 100%; height: 100%; }
+        
+        .sidebar { flex: 1; min-width: 300px; background-color: var(--card-bg); padding: 15px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
+        .alert-card { background-color: var(--bg-color); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .alert-card .del-btn { background-color: #f6465d; color: white; border: none; padding: 4px 8px; border-radius: 3px; }
+
+        #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 8px 15px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="top-left">
+            <select id="symbol-select" onchange="loadChartData()">
+                <option value="BTCUSDT">BTC/USDT</option>
+                <option value="ETHUSDT">ETH/USDT</option>
+                <option value="SOLUSDT">SOL/USDT</option>
+                <option value="BNBUSDT">BNB/USDT</option>
+            </select>
+            <div class="tf-buttons">
+                <button onclick="changeTF('1m')">1m</button>
+                <button onclick="changeTF('5m')">5m</button>
+                <button onclick="changeTF('15m')">15m</button>
+                <button onclick="changeTF('1h')">1h</button>
+                <button onclick="changeTF('4h')">4h</button>
+            </div>
+        </div>
+
+        <div class="top-center">
+            <button id="ema-9-20-btn" class="status-btn active" onclick="toggleAlert('ema_9_20')">9-20 EMA Cross Alert</button>
+            <button id="ema-200-btn" class="status-btn active" onclick="toggleAlert('ema_200')">200 EMA Touch Alert</button>
+        </div>
+
+        <div class="top-right">
+            <button onclick="toggleTheme()">Theme 🌗</button>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <div id="chart-wrapper">
+            <div id="chart"></div>
+            <div id="context-menu">
+                <button onclick="addHorizontalAlertFromMenu()">➕ Set Horizontal Alert Here</button>
+            </div>
+        </div>
+
+        <div class="sidebar">
+            <h3>Active Horizontal Alerts</h3>
+            <div id="alerts-list"></div>
+        </div>
+    </div>
+
+    <script>
+        let currentSymbol = "BTCUSDT";
+        let currentTF = "15m";
+        let chart, candlestickSeries, ema9Series, ema20Series, ema200Series;
+        let clickedPrice = null;
+        let systemState = {};
+        let priceLineMap = {};
+        let isDark = true;
+
+        function toggleTheme() {
+            isDark = !isDark;
+            document.body.classList.toggle('light-theme', !isDark);
+            chart.applyOptions({
+                layout: {
+                    backgroundColor: isDark ? '#131722' : '#ffffff',
+                    textColor: isDark ? '#d1d4dc' : '#131722',
+                },
+                grid: {
+                    vertLines: { color: isDark ? '#2a2e39' : '#e0e3eb' },
+                    horzLines: { color: isDark ? '#2a2e39' : '#e0e3eb' },
+                }
+            });
+        }
+
+        function initChart() {
+            const container = document.getElementById('chart');
+            chart = LightweightCharts.createChart(container, {
+                layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
+                grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
+                crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+                timeScale: { timeVisible: true, secondsVisible: false }
+            });
+
+            candlestickSeries = chart.addCandlestickSeries({ upColor: '#0ecb81', downColor: '#f6465d' });
+            ema9Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
+            ema20Series = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
+            ema200Series = chart.addLineSeries({ color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
+
+            container.addEventListener('contextmenu', function (e) {
+                e.preventDefault();
+                const menu = document.getElementById('context-menu');
+                menu.style.display = 'block';
+                menu.style.left = e.clientX + 'px';
+                menu.style.top = e.clientY + 'px';
+                
+                const coordinate = chart.priceScale('right').coordinateToPrice(e.offsetY);
+                clickedPrice = coordinate ? coordinate.toFixed(2) : null;
+            });
+
+            document.addEventListener('click', () => {
+                document.getElementById('context-menu').style.display = 'none';
+            });
+        }
+
+        async function loadChartData() {
+            currentSymbol = document.getElementById('symbol-select').value;
+            const res = await fetch(`/api/klines?symbol=${currentSymbol}&interval=${currentTF}`);
+            const data = await res.json();
+
+            candlestickSeries.setData(data.candles);
+            ema9Series.setData(data.ema9);
+            ema20Series.setData(data.ema20);
+            ema200Series.setData(data.ema200);
+
+            refreshPriceLines();
+        }
+
+        function changeTF(tf) {
+            currentTF = tf;
+            loadChartData();
+        }
+
+        async function toggleAlert(type) {
+            const is920 = type === 'ema_9_20';
+            const btn = document.getElementById(is920 ? 'ema-9-20-btn' : 'ema-200-btn');
+            const newStatus = !btn.classList.contains('active');
+
+            await fetch('/api/toggle-alert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ alert_type: type, status: newStatus })
+            });
+
+            updateButtonUI(btn, newStatus);
+        }
+
+        function updateButtonUI(btn, status) {
+            if (status) {
+                btn.classList.remove('inactive');
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+                btn.classList.add('inactive');
+            }
+        }
+
+        async function addHorizontalAlertFromMenu() {
+            if (!clickedPrice) return;
+            const msg = prompt(`Enter custom note for ${currentSymbol} at $${clickedPrice}:`, "Target Level Reached");
+            if (!msg) return;
+
+            await fetch('/api/add-horizontal-alert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: currentSymbol, price: parseFloat(clickedPrice), message: msg })
+            });
+
+            fetchSystemState();
+        }
+
+        async function deleteAlert(alertId) {
+            await fetch(`/api/delete-horizontal-alert/${alertId}`, { method: 'DELETE' });
+            fetchSystemState();
+        }
+
+        async function fetchSystemState() {
+            const res = await fetch('/api/system-state');
+            systemState = await res.json();
+
+            updateButtonUI(document.getElementById('ema-9-20-btn'), systemState.ema_9_20_active);
+            updateButtonUI(document.getElementById('ema-200-btn'), systemState.ema_200_active);
+
+            const alertsListContainer = document.getElementById('alerts-list');
+            alertsListContainer.innerHTML = '';
+
+            systemState.horizontal_alerts.forEach(alert => {
+                const item = document.createElement('div');
+                item.className = 'alert-card';
+                item.innerHTML = `
+                    <div>
+                        <strong>${alert.symbol}</strong> @ $${alert.price}<br/>
+                        <small>${alert.message}</small>
+                    </div>
+                    <button class="del-btn" onclick="deleteAlert(${alert.id})">Delete</button>
+                `;
+                alertsListContainer.appendChild(item);
+            });
+
+            refreshPriceLines();
+        }
+
+        function refreshPriceLines() {
+            Object.values(priceLineMap).forEach(line => candlestickSeries.removePriceLine(line));
+            priceLineMap = {};
+
+            if (systemState.horizontal_alerts) {
+                systemState.horizontal_alerts.forEach(alert => {
+                    if (alert.symbol === currentSymbol) {
+                        const line = candlestickSeries.createPriceLine({
+                            price: alert.price,
+                            color: '#ff9800',
+                            lineWidth: 2,
+                            lineStyle: LightweightCharts.LineStyle.Dashed,
+                            axisLabelVisible: true,
+                            title: alert.message,
+                        });
+                        priceLineMap[alert.id] = line;
+                    }
+                });
+            }
+        }
+
+        window.onload = async () => {
+            initChart();
+            await fetchSystemState();
+            await loadChartData();
+            
+            setInterval(() => {
+                loadChartData();
+                fetchSystemState();
+            }, 5000);
+        };
+    </script>
+</body>
+</html>
