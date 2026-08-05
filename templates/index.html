@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Trading Alert Dashboard</title>
-    <!-- Ultra-Stable Lightweight Charts v3.8.0 CDN -->
+    <!-- Lightweight Charts v3.8.0 Locked CDN -->
     <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
@@ -22,7 +22,7 @@
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         html, body { width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); color: var(--text-color); }
         
-        header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); height: 60px; }
+        header { display: flex; justify-content: space-between; align-items: center; padding: 0 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); height: 60px; }
         .top-left, .top-right, .top-center { display: flex; align-items: center; gap: 12px; }
         
         .status-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; color: white; transition: 0.3s; }
@@ -33,9 +33,11 @@
 
         select, button { padding: 6px 12px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
         
-        .main-container { width: 100vw; height: calc(100vh - 60px); position: relative; }
-        #chart { width: 100%; height: 100%; min-height: 400px; display: block; }
+        /* Container Dimensions Fixed to Prevent Blank Chart */
+        .main-container { width: 100vw; height: calc(100vh - 60px); position: relative; display: block; }
+        #chart { width: 100%; height: 100%; display: block; }
 
+        /* Modal Overlay for Active Alerts List */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background-color: var(--card-bg); width: 450px; max-height: 80vh; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -69,8 +71,8 @@
         </div>
 
         <div class="top-center">
-            <button id="ema-9-20-btn" class="status-btn inactive" onclick="toggleAlert('ema_9_20')">9-20 EMA Cross Alert</button>
-            <button id="ema-200-btn" class="status-btn inactive" onclick="toggleAlert('ema_200')">200 EMA Touch Alert</button>
+            <button id="ema-9-20-btn" class="status-btn inactive" onclick="toggleAlertState('ema_9_20')">9-20 EMA Cross Alert</button>
+            <button id="ema-200-btn" class="status-btn inactive" onclick="toggleAlertState('ema_200')">200 EMA Touch Alert</button>
         </div>
 
         <div class="top-right">
@@ -86,6 +88,7 @@
         </div>
     </div>
 
+    <!-- Active Alerts Modal -->
     <div id="alerts-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -93,6 +96,9 @@
                 <button onclick="closeAlertsModal()" style="padding: 2px 8px;">✕</button>
             </div>
             <div id="modal-alerts-list" class="modal-body"></div>
+            <div style="margin-top: 15px; text-align: right;">
+                <button onclick="clearAllAlerts()" style="background-color: #f6465d; color: white;">Clear All Alerts</button>
+            </div>
         </div>
     </div>
 
@@ -101,9 +107,13 @@
         let currentTF = "15m";
         let chart, candlestickSeries, ema9Series, ema20Series, ema200Series;
         let clickedPrice = null;
-        let systemState = {};
+        let activeAlerts = [];
         let priceLineMap = {};
         let isDark = true;
+
+        let isEma920Active = false;
+        let isEma200Active = false;
+        let lastEma200TouchedTime = 0;
 
         function toggleTheme() {
             isDark = !isDark;
@@ -120,9 +130,26 @@
             });
         }
 
+        function calculateEMA(candles, period) {
+            let k = 2 / (period + 1);
+            let emaData = [];
+            let ema = candles[0].close;
+
+            for (let i = 0; i < candles.length; i++) {
+                if (i === 0) {
+                    ema = candles[i].close;
+                } else {
+                    ema = (candles[i].close * k) + (ema * (1 - k));
+                }
+                if (i >= period - 1) {
+                    emaData.push({ time: candles[i].time, value: ema });
+                }
+            }
+            return emaData;
+        }
+
         function initChart() {
             const container = document.getElementById('chart');
-            
             const w = container.clientWidth || window.innerWidth;
             const h = container.clientHeight || (window.innerHeight - 60);
 
@@ -135,7 +162,6 @@
                 timeScale: { timeVisible: true, secondsVisible: false }
             });
 
-            // Standard v3.8.0 syntax
             candlestickSeries = chart.addCandlestickSeries({
                 upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false, wickUpColor: '#0ecb81', wickDownColor: '#f6465d'
             });
@@ -151,6 +177,7 @@
                 });
             });
 
+            // Right Click Event for Adding Alert
             container.addEventListener('contextmenu', function (e) {
                 e.preventDefault();
                 const menu = document.getElementById('context-menu');
@@ -160,9 +187,29 @@
                 
                 try {
                     const coord = candlestickSeries.coordinateToPrice(e.offsetY);
-                    clickedPrice = coord ? coord.toFixed(2) : null;
+                    clickedPrice = coord ? coord.toFixed(4) : null;
                 } catch (err) {
                     clickedPrice = null;
+                }
+            });
+
+            // Left Click on Line to Delete Alert
+            chart.subscribeClick((param) => {
+                if (!param.point || !activeAlerts || activeAlerts.length === 0) return;
+
+                const clickedChartPrice = candlestickSeries.coordinateToPrice(param.point.y);
+                if (!clickedChartPrice) return;
+
+                const matchedAlert = activeAlerts.find(a => {
+                    return a.symbol.toUpperCase() === currentSymbol.toUpperCase() && 
+                           Math.abs(parseFloat(a.price) - clickedChartPrice) / parseFloat(a.price) < 0.0015;
+                });
+
+                if (matchedAlert) {
+                    const confirmDel = confirm(`Delete Horizontal Alert for ${matchedAlert.symbol} at $${matchedAlert.price}?`);
+                    if (confirmDel) {
+                        deleteSingleAlert(matchedAlert.symbol, matchedAlert.price);
+                    }
                 }
             });
 
@@ -173,24 +220,82 @@
 
         async function loadChartData() {
             currentSymbol = document.getElementById('symbol-select').value;
+            const mexcTfMap = { "1m": "1m", "5m": "5m", "15m": "15m", "1h": "60m", "4h": "4h" };
+            const interval = mexcTfMap[currentTF] || "15m";
+
             try {
-                const res = await fetch(`/api/klines?symbol=${currentSymbol}&interval=${currentTF}`);
+                // Fetching Direct MEXC API
+                const res = await fetch(`https://api.mexc.com/api/v3/klines?symbol=${currentSymbol}&interval=${interval}&limit=250`);
                 const data = await res.json();
 
-                if (data.candles && data.candles.length > 0) {
-                    candlestickSeries.setData(data.candles);
-                    ema9Series.setData(data.ema9 || []);
-                    ema20Series.setData(data.ema20 || []);
-                    ema200Series.setData(data.ema200 || []);
-                    chart.timeScale().fitContent();
-                } else {
-                    console.warn("No candle data returned from server API");
+                if (Array.isArray(data) && data.length > 0) {
+                    let candles = [];
+                    for (let c of data) {
+                        candles.push({
+                            time: Math.floor(c[0] / 1000),
+                            open: parseFloat(c[1]),
+                            high: parseFloat(c[2]),
+                            low: parseFloat(c[3]),
+                            close: parseFloat(c[4])
+                        });
+                    }
+
+                    candlestickSeries.setData(candles);
+
+                    const ema9 = calculateEMA(candles, 9);
+                    const ema20 = calculateEMA(candles, 20);
+                    const ema200 = calculateEMA(candles, 200);
+
+                    ema9Series.setData(ema9);
+                    ema20Series.setData(ema20);
+                    ema200Series.setData(ema200);
+
+                    checkTechnicalAlerts(candles, ema9, ema20, ema200);
                 }
             } catch (e) {
-                console.error("Error loading chart data:", e);
+                console.error("MEXC Fetch Error:", e);
             }
 
             refreshPriceLines();
+        }
+
+        function checkTechnicalAlerts(candles, ema9, ema20, ema200) {
+            if (candles.length < 2 || ema9.length < 2 || ema20.length < 2 || ema200.length < 1) return;
+
+            const lastIndex = candles.length - 1;
+            const currCandle = candles[lastIndex];
+            const currEma9 = ema9[ema9.length - 1].value;
+            const currEma20 = ema20[ema20.length - 1].value;
+            const prevEma9 = ema9[ema9.length - 2].value;
+            const prevEma20 = ema20[ema20.length - 2].value;
+            const currEma200 = ema200[ema200.length - 1].value;
+
+            // 1. EMA 9-20 Cross
+            if (isEma920Active) {
+                if (prevEma9 <= prevEma20 && currEma9 > currEma20) {
+                    triggerInstantAlert(currentSymbol, currCandle.close, `🚨 9-20 EMA BULLISH CROSSOVER (${currentTF})`);
+                } else if (prevEma9 >= prevEma20 && currEma9 < currEma20) {
+                    triggerInstantAlert(currentSymbol, currCandle.close, `⚠️ 9-20 EMA BEARISH CROSSOVER (${currentTF})`);
+                }
+            }
+
+            // 2. 200 EMA Touch
+            if (isEma200Active) {
+                if (currCandle.low <= currEma200 && currCandle.high >= currEma200) {
+                    if (currCandle.time !== lastEma200TouchedTime) {
+                        lastEma200TouchedTime = currCandle.time;
+                        triggerInstantAlert(currentSymbol, currCandle.close, `🎯 PRICE TOUCHED 200 EMA (${currentTF})`);
+                    }
+                }
+            }
+        }
+
+        async function triggerInstantAlert(symbol, price, message) {
+            await fetch('/api/trigger_alert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol, price: price, message: message })
+            });
         }
 
         function changeTF(tf) {
@@ -198,18 +303,14 @@
             loadChartData();
         }
 
-        async function toggleAlert(type) {
-            const is920 = type === 'ema_9_20';
-            const btn = document.getElementById(is920 ? 'ema-9-20-btn' : 'ema-200-btn');
-            const newStatus = !btn.classList.contains('active');
-
-            await fetch('/api/toggle-alert', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ alert_type: type, status: newStatus })
-            });
-
-            updateButtonUI(btn, newStatus);
+        function toggleAlertState(type) {
+            if (type === 'ema_9_20') {
+                isEma920Active = !isEma920Active;
+                updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
+            } else if (type === 'ema_200') {
+                isEma200Active = !isEma200Active;
+                updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
+            }
         }
 
         function updateButtonUI(btn, status) {
@@ -227,18 +328,25 @@
             const msg = prompt(`Enter custom note for ${currentSymbol} at $${clickedPrice}:`, "Target Level Reached");
             if (!msg) return;
 
-            await fetch('/api/add-horizontal-alert', {
+            await fetch('/api/add_alert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ symbol: currentSymbol, price: parseFloat(clickedPrice), message: msg })
             });
 
-            fetchSystemState();
+            fetchServerAlerts();
         }
 
-        async function deleteAlert(alertId) {
-            await fetch(`/api/delete-horizontal-alert/${alertId}`, { method: 'DELETE' });
-            fetchSystemState();
+        async function deleteSingleAlert(symbol, price) {
+            await triggerInstantAlert(symbol, price, "Manually Deleted");
+            fetchServerAlerts();
+        }
+
+        async function clearAllAlerts() {
+            if (confirm("Are you sure you want to clear all active alerts?")) {
+                await fetch('/api/clear_alerts', { method: 'POST' });
+                fetchServerAlerts();
+            }
         }
 
         function openAlertsModal() {
@@ -249,29 +357,26 @@
             document.getElementById('alerts-modal').style.display = 'none';
         }
 
-        async function fetchSystemState() {
+        async function fetchServerAlerts() {
             try {
-                const res = await fetch('/api/system-state');
-                systemState = await res.json();
-
-                updateButtonUI(document.getElementById('ema-9-20-btn'), systemState.ema_9_20_active);
-                updateButtonUI(document.getElementById('ema-200-btn'), systemState.ema_200_active);
+                const res = await fetch('/api/get_alerts');
+                activeAlerts = await res.json();
 
                 const modalAlertsContainer = document.getElementById('modal-alerts-list');
                 modalAlertsContainer.innerHTML = '';
 
-                if (!systemState.horizontal_alerts || systemState.horizontal_alerts.length === 0) {
+                if (!activeAlerts || activeAlerts.length === 0) {
                     modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
                 } else {
-                    systemState.horizontal_alerts.forEach(alert => {
+                    activeAlerts.forEach(alert => {
                         const item = document.createElement('div');
                         item.className = 'alert-card';
                         item.innerHTML = `
                             <div>
-                                <strong>${alert.symbol}</strong> @ $${alert.price}<br/>
-                                <small>${alert.message}</small>
+                                <strong>${alert.symbol.toUpperCase()}</strong> @ $${parseFloat(alert.price).toFixed(4)}<br/>
+                                <small>${alert.message || 'Level Reached'}</small>
                             </div>
-                            <button class="del-btn" onclick="deleteAlert(${alert.id})">Delete</button>
+                            <button class="del-btn" onclick="deleteSingleAlert('${alert.symbol}', ${alert.price})">Delete</button>
                         `;
                         modalAlertsContainer.appendChild(item);
                     });
@@ -279,7 +384,7 @@
 
                 refreshPriceLines();
             } catch (e) {
-                console.error("Error fetching system state:", e);
+                console.error("Error fetching alerts:", e);
             }
         }
 
@@ -289,18 +394,18 @@
             });
             priceLineMap = {};
 
-            if (systemState.horizontal_alerts) {
-                systemState.horizontal_alerts.forEach(alert => {
-                    if (alert.symbol === currentSymbol) {
+            if (activeAlerts && activeAlerts.length > 0) {
+                activeAlerts.forEach((alert, idx) => {
+                    if (alert.symbol.toUpperCase() === currentSymbol.toUpperCase()) {
                         const line = candlestickSeries.createPriceLine({
-                            price: alert.price,
+                            price: parseFloat(alert.price),
                             color: '#ff9800',
                             lineWidth: 2,
                             lineStyle: LightweightCharts.LineStyle.Dashed,
                             axisLabelVisible: true,
-                            title: alert.message,
+                            title: alert.message || 'Alert Target',
                         });
-                        priceLineMap[alert.id] = line;
+                        priceLineMap[idx] = line;
                     }
                 });
             }
@@ -308,12 +413,12 @@
 
         window.onload = async () => {
             initChart();
-            await fetchSystemState();
+            await fetchServerAlerts();
             await loadChartData();
             
             setInterval(() => {
                 loadChartData();
-                fetchSystemState();
+                fetchServerAlerts();
             }, 5000);
         };
     </script>
