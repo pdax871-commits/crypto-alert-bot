@@ -35,7 +35,6 @@
         .main-container { width: 100vw; height: calc(100vh - 60px); position: relative; display: block; }
         #chart { width: 100%; height: 100%; display: block; }
 
-        /* Custom Modal Overlay */
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
         .modal-content { background-color: var(--card-bg); width: 420px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
@@ -86,7 +85,7 @@
         </div>
     </div>
 
-    <!-- Active Alerts Modal -->
+    <!-- Active Alerts List Modal -->
     <div id="alerts-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -100,7 +99,7 @@
         </div>
     </div>
 
-    <!-- Add Alert UI Modal (Replaces browser alert/prompt) -->
+    <!-- Add Alert UI Modal -->
     <div id="add-alert-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -120,6 +119,23 @@
         </div>
     </div>
 
+    <!-- Confirm Delete Modal (Triggered when left clicking a line) -->
+    <div id="confirm-delete-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Delete Alert</h3>
+                <button onclick="closeModal('confirm-delete-modal')" style="padding: 2px 8px; border:none; cursor:pointer;">✕</button>
+            </div>
+            <div class="modal-body">
+                <p id="delete-alert-text">Do you want to delete this alert?</p>
+            </div>
+            <div style="margin-top: 15px; display:flex; justify-content: flex-end; gap: 10px;">
+                <button onclick="closeModal('confirm-delete-modal')">Cancel</button>
+                <button id="confirm-delete-btn" style="background-color: #f6465d; color: white; border:none;">Delete</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         let currentSymbol = "BTCUSDT";
         let currentTF = "15m";
@@ -130,8 +146,9 @@
         let isDark = true;
         let isFirstLoad = true;
 
-        let isEma920Active = false;
-        let isEma200Active = false;
+        // Persist EMA States using localStorage
+        let isEma920Active = localStorage.getItem('isEma920Active') === 'true';
+        let isEma200Active = localStorage.getItem('isEma200Active') === 'true';
         let lastEma200TouchedTime = 0;
 
         function toggleTheme() {
@@ -212,20 +229,21 @@
                 }
             });
 
-            // Direct line click deletion
+            // Strict Line Click Delete Detection (Shows Confirmation Modal First)
             chart.subscribeClick((param) => {
                 if (!param.point || !activeAlerts || activeAlerts.length === 0) return;
 
                 const clickedChartPrice = candlestickSeries.coordinateToPrice(param.point.y);
                 if (!clickedChartPrice) return;
 
+                // Precision threshold (0.05%) to avoid accidental clicks from distance
                 const matchedAlert = activeAlerts.find(a => {
                     return a.symbol.toUpperCase() === currentSymbol.toUpperCase() && 
-                           Math.abs(parseFloat(a.price) - clickedChartPrice) / parseFloat(a.price) < 0.0015;
+                           Math.abs(parseFloat(a.price) - clickedChartPrice) / parseFloat(a.price) < 0.0005;
                 });
 
                 if (matchedAlert) {
-                    deleteSingleAlert(matchedAlert.symbol, matchedAlert.price);
+                    promptDeleteAlert(matchedAlert.symbol, matchedAlert.price);
                 }
             });
 
@@ -263,7 +281,6 @@
                     ema20Series.setData(ema20);
                     ema200Series.setData(ema200);
 
-                    // FIX: fitContent only runs once on load or manual symbol change, keeping zoom level locked
                     if (isFirstLoad || resetZoom) {
                         chart.timeScale().fitContent();
                         isFirstLoad = false;
@@ -323,9 +340,11 @@
         function toggleAlertState(type) {
             if (type === 'ema_9_20') {
                 isEma920Active = !isEma920Active;
+                localStorage.setItem('isEma920Active', isEma920Active);
                 updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
             } else if (type === 'ema_200') {
                 isEma200Active = !isEma200Active;
+                localStorage.setItem('isEma200Active', isEma200Active);
                 updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
             }
         }
@@ -360,8 +379,24 @@
             fetchServerAlerts();
         }
 
+        // Silent Delete Modal Prompt
+        function promptDeleteAlert(symbol, price) {
+            document.getElementById('delete-alert-text').innerText = `Delete alert for ${symbol} at $${price}?`;
+            const confirmBtn = document.getElementById('confirm-delete-btn');
+            confirmBtn.onclick = async () => {
+                await deleteSingleAlert(symbol, price);
+                closeModal('confirm-delete-modal');
+            };
+            document.getElementById('confirm-delete-modal').style.display = 'flex';
+        }
+
+        // Silent Delete Action (Calls /api/delete_alert instead of trigger)
         async function deleteSingleAlert(symbol, price) {
-            await triggerInstantAlert(symbol, price, "Alert Removed");
+            await fetch('/api/delete_alert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol: symbol, price: price })
+            });
             fetchServerAlerts();
         }
 
@@ -398,7 +433,7 @@
                                 <strong>${alert.symbol.toUpperCase()}</strong> @ $${parseFloat(alert.price).toFixed(4)}<br/>
                                 <small>${alert.message || 'Level Reached'}</small>
                             </div>
-                            <button class="del-btn" onclick="deleteSingleAlert('${alert.symbol}', ${alert.price})">Delete</button>
+                            <button class="del-btn" onclick="promptDeleteAlert('${alert.symbol}', ${alert.price})">Delete</button>
                         `;
                         modalAlertsContainer.appendChild(item);
                     });
@@ -435,6 +470,11 @@
 
         window.onload = async () => {
             initChart();
+            
+            // Restore saved EMA button states
+            updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
+            updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
+
             await fetchServerAlerts();
             await loadChartData(true);
             
