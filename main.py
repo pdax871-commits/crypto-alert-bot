@@ -30,9 +30,6 @@ def send_telegram_alert(msg):
     try: requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=5)
     except: pass
 
-# ========================================================
-# ENGINE: BACKGROUND SCANNER (Geo-Block Bypassed via MEXC)
-# ========================================================
 def process_active_alerts():
     alerts = load_alerts()
     if not alerts: return []
@@ -46,7 +43,6 @@ def process_active_alerts():
         created_at_ms = a.get('created_at', 0)
 
         try:
-            # 🛡️ BYPASS: Fetching from MEXC API (Allows Render's US IP)
             url = f"https://api.mexc.com/api/v3/klines?symbol={sym}&interval=1m&limit=15"
             res = requests.get(url, timeout=5)
             
@@ -55,9 +51,7 @@ def process_active_alerts():
                 hit = False
                 
                 for c in candles:
-                    candle_close_time_ms = c[6] # Candle closing timestamp
-                    
-                    # Agar ye candle alert lagane se pehle ban chuki thi, toh ignore karo
+                    candle_close_time_ms = c[6]
                     if candle_close_time_ms < created_at_ms:
                         continue
                     
@@ -76,7 +70,7 @@ def process_active_alerts():
                     remaining.append(a)
             else:
                 remaining.append(a)
-        except Exception as e:
+        except Exception:
             remaining.append(a)
 
     if triggered_any:
@@ -88,9 +82,27 @@ def process_active_alerts():
 
 @app.route('/ping')
 def ping():
-    # Jab UptimeRobot hit karega, background check trigger hoga
     remaining = process_active_alerts()
     return jsonify({"status": "awake", "active_alerts": len(remaining)})
+
+# 🛡️ CORS FIX: Backend Proxy for MEXC Klines
+@app.route('/api/klines')
+def get_klines():
+    symbol = request.args.get('symbol', 'BTCUSDT').upper()
+    interval = request.args.get('interval', '15m')
+    
+    mexc_tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "60m", "4h": "4h"}
+    tf = mexc_tf_map.get(interval, "15m")
+    
+    url = f"https://api.mexc.com/api/v3/klines?symbol={symbol}&interval={tf}&limit=250"
+    try:
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200:
+            return jsonify(res.json())
+    except Exception as e:
+        print(f"Klines Error: {e}")
+        
+    return jsonify([])
 
 @app.route('/api/get_alerts', methods=['GET'])
 def get_alerts():
@@ -104,8 +116,6 @@ def index():
 @app.route('/api/add_alert', methods=['POST'])
 def add_alert():
     data = request.json
-    
-    # ⏱️ DOUBLE CHECK FIX: Accurate Cloud Server Time
     try:
         server_time_ms = requests.get("https://api.mexc.com/api/v3/time", timeout=3).json()['serverTime']
     except:
