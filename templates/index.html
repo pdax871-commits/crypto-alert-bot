@@ -182,10 +182,11 @@
         menu.style.left = e.clientX + 'px';
         menu.style.top = e.clientY + 'px';
         
-        const coordinate = chart.priceScale('right').coordinateToPrice(e.offsetY);
-        clickedPrice = coordinate ? coordinate.toFixed(2) : null;
-    });
+         const coordinate = candlestickSeries.coordinateToPrice(e.offsetY);
+clickedPrice = coordinate ? coordinate.toFixed(2) : null;
 
+    });
+        
     document.addEventListener('click', () => {
         document.getElementById('context-menu').style.display = 'none';
     });
