@@ -21,21 +21,27 @@
         body { background-color: var(--bg-color); color: var(--text-color); height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
         
         header { display: flex; justify-content: space-between; align-items: center; padding: 10px 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); }
-        .top-left, .top-right, .top-center { display: flex; align-items: center; gap: 10px; }
+        .top-left, .top-right, .top-center { display: flex; align-items: center; gap: 12px; }
         
         .status-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; color: white; transition: 0.3s; }
         .status-btn.active { background-color: #0ecb81; }
         .status-btn.inactive { background-color: #f6465d; }
 
+        .action-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--card-bg); color: var(--text-color); cursor: pointer; }
+
         select, button { padding: 6px 12px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; cursor: pointer; }
         
-        .main-container { display: flex; flex: 1; height: calc(100vh - 60px); }
-        #chart-wrapper { flex: 3; position: relative; border-right: 1px solid var(--border-color); }
+        .main-container { flex: 1; position: relative; width: 100%; height: calc(100vh - 60px); }
         #chart { width: 100%; height: 100%; }
+
+        /* Modal Styles for Active Alerts */
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background-color: var(--card-bg); width: 450px; max-height: 80vh; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
+        .modal-body { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; max-height: 60vh; }
         
-        .sidebar { flex: 1; min-width: 300px; background-color: var(--card-bg); padding: 15px; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; }
-        .alert-card { background-color: var(--bg-color); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
-        .alert-card .del-btn { background-color: #f6465d; color: white; border: none; padding: 4px 8px; border-radius: 3px; }
+        .alert-card { background-color: var(--bg-color); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
+        .alert-card .del-btn { background-color: #f6465d; color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
 
         #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 8px 15px; }
@@ -51,36 +57,47 @@
                 <option value="SOLUSDT">SOL/USDT</option>
                 <option value="BNBUSDT">BNB/USDT</option>
             </select>
-            <div class="tf-buttons">
-                <button onclick="changeTF('1m')">1m</button>
-                <button onclick="changeTF('5m')">5m</button>
-                <button onclick="changeTF('15m')">15m</button>
-                <button onclick="changeTF('1h')">1h</button>
-                <button onclick="changeTF('4h')">4h</button>
-            </div>
+            
+            <!-- Requirement 2: Timeframe Dropdown -->
+            <select id="tf-select" onchange="changeTF(this.value)">
+                <option value="1m">1m</option>
+                <option value="5m">5m</option>
+                <option value="15m" selected>15m</option>
+                <option value="1h">1h</option>
+                <option value="4h">4h</option>
+            </select>
         </div>
 
         <div class="top-center">
-            <button id="ema-9-20-btn" class="status-btn active" onclick="toggleAlert('ema_9_20')">9-20 EMA Cross Alert</button>
-            <button id="ema-200-btn" class="status-btn active" onclick="toggleAlert('ema_200')">200 EMA Touch Alert</button>
+            <!-- Requirement 4: By Default OFF (Red) -->
+            <button id="ema-9-20-btn" class="status-btn inactive" onclick="toggleAlert('ema_9_20')">9-20 EMA Cross Alert</button>
+            <button id="ema-200-btn" class="status-btn inactive" onclick="toggleAlert('ema_200')">200 EMA Touch Alert</button>
         </div>
 
         <div class="top-right">
+            <!-- Requirement 3: Active Alerts Modal Trigger Button -->
+            <button class="action-btn" onclick="openAlertsModal()">🔔 Active Alerts</button>
             <button onclick="toggleTheme()">Theme 🌗</button>
         </div>
     </header>
 
     <div class="main-container">
-        <div id="chart-wrapper">
-            <div id="chart"></div>
-            <div id="context-menu">
-                <button onclick="addHorizontalAlertFromMenu()">➕ Set Horizontal Alert Here</button>
-            </div>
+        <div id="chart"></div>
+        <div id="context-menu">
+            <button onclick="addHorizontalAlertFromMenu()">➕ Set Horizontal Alert Here</button>
         </div>
+    </div>
 
-        <div class="sidebar">
-            <h3>Active Horizontal Alerts</h3>
-            <div id="alerts-list"></div>
+    <!-- Active Alerts Modal -->
+    <div id="alerts-modal" class="modal-overlay">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>Active Horizontal Alerts</h3>
+                <button onclick="closeAlertsModal()" style="padding: 2px 8px;">✕</button>
+            </div>
+            <div id="modal-alerts-list" class="modal-body">
+                <!-- Alerts rendered here -->
+            </div>
         </div>
     </div>
 
@@ -111,6 +128,8 @@
         function initChart() {
             const container = document.getElementById('chart');
             chart = LightweightCharts.createChart(container, {
+                width: container.clientWidth,
+                height: container.clientHeight,
                 layout: { backgroundColor: '#131722', textColor: '#d1d4dc' },
                 grid: { vertLines: { color: '#2a2e39' }, horzLines: { color: '#2a2e39' } },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
@@ -121,6 +140,14 @@
             ema9Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
             ema20Series = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
             ema200Series = chart.addLineSeries({ color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
+
+            // Auto Resize Chart on Window Change
+            window.addEventListener('resize', () => {
+                chart.applyOptions({
+                    width: container.clientWidth,
+                    height: container.clientHeight
+                });
+            });
 
             container.addEventListener('contextmenu', function (e) {
                 e.preventDefault();
@@ -199,6 +226,15 @@
             fetchSystemState();
         }
 
+        // Modal Controls
+        function openAlertsModal() {
+            document.getElementById('alerts-modal').style.display = 'flex';
+        }
+
+        function closeAlertsModal() {
+            document.getElementById('alerts-modal').style.display = 'none';
+        }
+
         async function fetchSystemState() {
             const res = await fetch('/api/system-state');
             systemState = await res.json();
@@ -206,21 +242,25 @@
             updateButtonUI(document.getElementById('ema-9-20-btn'), systemState.ema_9_20_active);
             updateButtonUI(document.getElementById('ema-200-btn'), systemState.ema_200_active);
 
-            const alertsListContainer = document.getElementById('alerts-list');
-            alertsListContainer.innerHTML = '';
+            const modalAlertsContainer = document.getElementById('modal-alerts-list');
+            modalAlertsContainer.innerHTML = '';
 
-            systemState.horizontal_alerts.forEach(alert => {
-                const item = document.createElement('div');
-                item.className = 'alert-card';
-                item.innerHTML = `
-                    <div>
-                        <strong>${alert.symbol}</strong> @ $${alert.price}<br/>
-                        <small>${alert.message}</small>
-                    </div>
-                    <button class="del-btn" onclick="deleteAlert(${alert.id})">Delete</button>
-                `;
-                alertsListContainer.appendChild(item);
-            });
+            if (systemState.horizontal_alerts.length === 0) {
+                modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
+            } else {
+                systemState.horizontal_alerts.forEach(alert => {
+                    const item = document.createElement('div');
+                    item.className = 'alert-card';
+                    item.innerHTML = `
+                        <div>
+                            <strong>${alert.symbol}</strong> @ $${alert.price}<br/>
+                            <small>${alert.message}</small>
+                        </div>
+                        <button class="del-btn" onclick="deleteAlert(${alert.id})">Delete</button>
+                    `;
+                    modalAlertsContainer.appendChild(item);
+                });
+            }
 
             refreshPriceLines();
         }
