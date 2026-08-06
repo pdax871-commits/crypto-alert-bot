@@ -46,7 +46,6 @@
         #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 10px 15px; cursor: pointer; }
 
-        /* Requirement 5: Toast Pop-up Notification (Bottom Right) */
         #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
         .toast { background-color: #0ecb81; color: white; padding: 12px 20px; border-radius: 6px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideIn 0.3s ease-out; }
         @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -72,7 +71,6 @@
             </select>
         </div>
 
-        <!-- Requirement 3: EMA Buttons moved to Right side -->
         <div class="top-right">
             <button id="ema-9-20-btn" class="status-btn inactive" onclick="toggleAlertState('ema_9_20')">9-20 EMA Cross Alert</button>
             <button id="ema-200-btn" class="status-btn inactive" onclick="toggleAlertState('ema_200')">200 EMA Touch Alert</button>
@@ -88,24 +86,21 @@
         </div>
     </div>
 
-    <!-- Toast Notification Container -->
     <div id="toast-container"></div>
 
-    <!-- Active Alerts Modal -->
     <div id="alerts-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Active Horizontal Alerts</h3>
+                <h3>Active Alerts List</h3>
                 <button onclick="closeModal('alerts-modal')" style="padding: 2px 8px; border:none; cursor:pointer;">✕</button>
             </div>
             <div id="modal-alerts-list" class="modal-body"></div>
             <div style="margin-top: 15px; text-align: right;">
-                <button onclick="clearAllAlerts()" style="background-color: #f6465d; color: white; border:none; cursor:pointer;">Clear All Alerts</button>
+                <button onclick="clearAllAlerts()" style="background-color: #f6465d; color: white; border:none; cursor:pointer;">Clear All Horizontal Alerts</button>
             </div>
         </div>
     </div>
 
-    <!-- Add Alert UI Modal -->
     <div id="add-alert-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -125,7 +120,6 @@
         </div>
     </div>
 
-    <!-- Confirm Delete Modal -->
     <div id="confirm-delete-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -152,8 +146,9 @@
         let isDark = true;
         let isFirstLoad = true;
 
-        let isEma920Active = false;
-        let isEma200Active = false;
+        // READ STRICTLY FROM LOCALSTORAGE (FIX: Refresh state retention)
+        let isEma920Active = localStorage.getItem('isEma920Active') === 'true';
+        let isEma200Active = localStorage.getItem('isEma200Active') === 'true';
         let lastCrossCandleTime = 0;
         let lastEma200TouchedTime = 0;
 
@@ -265,14 +260,12 @@
             });
         }
 
-        // Requirement 1 Fix: Reset EMA buttons to OFF when changing symbol or timeframe
-     function onSymbolOrTfChange() {
-    currentSymbol = document.getElementById('symbol-select').value;
-    currentTF = document.getElementById('tf-select').value;
-    
-    // Auto Reset ko HATA DIYA hai taaki state manual off hone tak persistent rahe
-    loadChartData(true);
-}
+        // PERSISTENCE FIX: Symbol / Timeframe badalne par state OFF nahi hogi
+        function onSymbolOrTfChange() {
+            currentSymbol = document.getElementById('symbol-select').value;
+            currentTF = document.getElementById('tf-select').value;
+            loadChartData(true);
+        }
 
         async function loadChartData(resetZoom = false) {
             try {
@@ -315,11 +308,10 @@
             refreshPriceLines();
         }
 
-        // Requirement 2: Check Crossover ONLY AFTER CANDLE CLOSE (Checked at index -2)
+        // CANDLE CLOSE VALIDATION: Candle close hone par (-2 index) alert trigger hoga
         function checkTechnicalAlerts(candles, ema9, ema20, ema200) {
             if (candles.length < 3 || ema9.length < 3 || ema20.length < 3 || ema200.length < 2) return;
 
-            // Index -1 is current forming candle, Index -2 is last CLOSED candle
             const closedCandleIndex = candles.length - 2;
             const closedCandle = candles[closedCandleIndex];
 
@@ -329,7 +321,6 @@
             const ema20_prev = ema20[ema20.length - 3].value;
             const ema200_closed = ema200[ema200.length - 2].value;
 
-            // 1. EMA 9-20 Closed Candle Cross Check
             if (isEma920Active) {
                 if (closedCandle.time !== lastCrossCandleTime) {
                     if (ema9_prev <= ema20_prev && ema9_closed > ema20_closed) {
@@ -342,7 +333,6 @@
                 }
             }
 
-            // 2. 200 EMA Closed Candle Touch Check
             if (isEma200Active) {
                 if (closedCandle.low <= ema200_closed && closedCandle.high >= ema200_closed) {
                     if (closedCandle.time !== lastEma200TouchedTime) {
@@ -361,17 +351,18 @@
             });
         }
 
-     function toggleAlertState(type) {
-    if (type === 'ema_9_20') {
-        isEma920Active = !isEma920Active;
-        localStorage.setItem('isEma920Active', isEma920Active);
-        updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
-    } else if (type === 'ema_200') {
-        isEma200Active = !isEma200Active;
-        localStorage.setItem('isEma200Active', isEma200Active);
-        updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
-    }
-}
+        function toggleAlertState(type) {
+            if (type === 'ema_9_20') {
+                isEma920Active = !isEma920Active;
+                localStorage.setItem('isEma920Active', isEma920Active);
+                updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
+            } else if (type === 'ema_200') {
+                isEma200Active = !isEma200Active;
+                localStorage.setItem('isEma200Active', isEma200Active);
+                updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
+            }
+            fetchServerAlerts(); // Alert List update on toggle
+        }
 
         function updateButtonUI(btn, status) {
             if (status) {
@@ -427,7 +418,7 @@
         async function clearAllAlerts() {
             await fetch('/api/clear_alerts', { method: 'POST' });
             closeModal('alerts-modal');
-            showToast(`🗑️ All alerts cleared`);
+            showToast(`🗑️ All horizontal alerts cleared`);
             fetchServerAlerts();
         }
 
@@ -439,75 +430,76 @@
             document.getElementById(id).style.display = 'none';
         }
 
-        // Requirement 4: Renders ALL alerts regardless of instrument
-   async function fetchServerAlerts() {
-    try {
-        const res = await fetch('/api/get_alerts');
-        activeAlerts = await res.json();
+        // ALL ALERTS IN MODAL: Indicator Alerts + Horizontal Level Alerts
+        async function fetchServerAlerts() {
+            try {
+                const res = await fetch('/api/get_alerts');
+                activeAlerts = await res.json();
 
-        const modalAlertsContainer = document.getElementById('modal-alerts-list');
-        modalAlertsContainer.innerHTML = '';
+                const modalAlertsContainer = document.getElementById('modal-alerts-list');
+                modalAlertsContainer.innerHTML = '';
 
-        let hasAnyAlert = false;
+                let hasAnyAlert = false;
 
-        // 1. Show 9-20 EMA Cross Status if ACTIVE
-        if (isEma920Active) {
-            hasAnyAlert = true;
-            const item = document.createElement('div');
-            item.className = 'alert-card';
-            item.style.borderColor = '#0ecb81';
-            item.innerHTML = `
-                <div>
-                    <strong>9-20 EMA Crossover Alert</strong><br/>
-                    <small style="color: #0ecb81;">Status: ACTIVE (Auto Scanning)</small>
-                </div>
-                <button class="del-btn" onclick="toggleAlertState('ema_9_20'); fetchServerAlerts();">Turn OFF</button>
-            `;
-            modalAlertsContainer.appendChild(item);
+                // 1. Render 9-20 EMA Alert Status
+                if (isEma920Active) {
+                    hasAnyAlert = true;
+                    const item = document.createElement('div');
+                    item.className = 'alert-card';
+                    item.style.borderColor = '#0ecb81';
+                    item.innerHTML = `
+                        <div>
+                            <strong>9-20 EMA Crossover Alert</strong><br/>
+                            <small style="color: #0ecb81;">Status: ACTIVE (Auto Scanning)</small>
+                        </div>
+                        <button class="del-btn" onclick="toggleAlertState('ema_9_20')">Turn OFF</button>
+                    `;
+                    modalAlertsContainer.appendChild(item);
+                }
+
+                // 2. Render 200 EMA Touch Alert Status
+                if (isEma200Active) {
+                    hasAnyAlert = true;
+                    const item = document.createElement('div');
+                    item.className = 'alert-card';
+                    item.style.borderColor = '#0ecb81';
+                    item.innerHTML = `
+                        <div>
+                            <strong>200 EMA Touch Alert</strong><br/>
+                            <small style="color: #0ecb81;">Status: ACTIVE (Auto Scanning)</small>
+                        </div>
+                        <button class="del-btn" onclick="toggleAlertState('ema_200')">Turn OFF</button>
+                    `;
+                    modalAlertsContainer.appendChild(item);
+                }
+
+                // 3. Render Horizontal Price Level Alerts
+                if (activeAlerts && activeAlerts.length > 0) {
+                    hasAnyAlert = true;
+                    activeAlerts.forEach(alert => {
+                        const item = document.createElement('div');
+                        item.className = 'alert-card';
+                        item.innerHTML = `
+                            <div>
+                                <strong>${alert.symbol.toUpperCase()}</strong> @ $${parseFloat(alert.price).toFixed(4)}<br/>
+                                <small>${alert.message || 'Level Reached'}</small>
+                            </div>
+                            <button class="del-btn" onclick="promptDeleteAlert('${alert.symbol}', ${alert.price})">Delete</button>
+                        `;
+                        modalAlertsContainer.appendChild(item);
+                    });
+                }
+
+                if (!hasAnyAlert) {
+                    modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
+                }
+
+                refreshPriceLines();
+            } catch (e) {
+                console.error("Error fetching alerts:", e);
+            }
         }
 
-        // 2. Show 200 EMA Touch Status if ACTIVE
-        if (isEma200Active) {
-            hasAnyAlert = true;
-            const item = document.createElement('div');
-            item.className = 'alert-card';
-            item.style.borderColor = '#0ecb81';
-            item.innerHTML = `
-                <div>
-                    <strong>200 EMA Touch Alert</strong><br/>
-                    <small style="color: #0ecb81;">Status: ACTIVE (Auto Scanning)</small>
-                </div>
-                <button class="del-btn" onclick="toggleAlertState('ema_200'); fetchServerAlerts();">Turn OFF</button>
-            `;
-            modalAlertsContainer.appendChild(item);
-        }
-
-        // 3. Render Horizontal Level Alerts
-        if (activeAlerts && activeAlerts.length > 0) {
-            hasAnyAlert = true;
-            activeAlerts.forEach(alert => {
-                const item = document.createElement('div');
-                item.className = 'alert-card';
-                item.innerHTML = `
-                    <div>
-                        <strong>${alert.symbol.toUpperCase()}</strong> @ $${parseFloat(alert.price).toFixed(4)}<br/>
-                        <small>${alert.message || 'Level Reached'}</small>
-                    </div>
-                    <button class="del-btn" onclick="promptDeleteAlert('${alert.symbol}', ${alert.price})">Delete</button>
-                `;
-                modalAlertsContainer.appendChild(item);
-            });
-        }
-
-        if (!hasAnyAlert) {
-            modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
-        }
-
-        refreshPriceLines();
-    } catch (e) {
-        console.error("Error fetching alerts:", e);
-    }
-}
         function refreshPriceLines() {
             Object.values(priceLineMap).forEach(line => {
                 try { candlestickSeries.removePriceLine(line); } catch(e){}
@@ -533,6 +525,11 @@
 
         window.onload = async () => {
             initChart();
+
+            // SYNC UI ON LOAD FROM LOCALSTORAGE
+            updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
+            updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
+
             await fetchServerAlerts();
             await loadChartData(true);
             
