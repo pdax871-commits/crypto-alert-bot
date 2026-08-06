@@ -42,6 +42,11 @@ def process_active_alerts():
     triggered_any = False
 
     for a in alerts:
+        # Ignore non-price horizontal alerts in background price loop
+        if a.get('type') in ['ema_9_20', 'ema_200']:
+            remaining.append(a)
+            continue
+
         sym = a['symbol'].upper()
         target = float(a['price'])
         created_at_ms = a.get('created_at', 0)
@@ -126,9 +131,13 @@ def add_alert():
     data['created_at'] = server_time_ms
     
     alerts = load_alerts()
+    # Check duplicate EMA indicators for same symbol & tf
+    if data.get('type') in ['ema_9_20', 'ema_200']:
+        alerts = [a for a in alerts if not (a.get('type') == data.get('type') and a.get('symbol') == data.get('symbol') and a.get('tf') == data.get('tf'))]
+    
     alerts.append(data)
     save_alerts(alerts)
-    return jsonify({"status": "success", "total": len(alerts)})
+    return jsonify({"status": "success", "alerts": alerts})
 
 @app.route('/api/trigger_alert', methods=['POST'])
 def trigger_alert():
@@ -137,25 +146,24 @@ def trigger_alert():
     price = float(data.get('price', 0))
     msg = data.get('message', '')
 
-    telegram_msg = f"🚨 *ALERT TRIGGERED!*\n\nCoin: *{sym}*\nPrice: *${price:.4f}*\n📝 *{msg}*"
+    telegram_msg = f"🚨 *INDICATOR ALERT TRIGGERED!*\n\nCoin: *{sym}*\nPrice: *${price:.4f}*\n📝 *{msg}*"
     send_telegram_alert(telegram_msg)
-    
-    alerts = load_alerts()
-    alerts = [a for a in alerts if not (a['symbol'].lower() == sym.lower() and abs(float(a['price']) - price) < 0.0001)]
-    save_alerts(alerts)
     return jsonify({"status": "triggered"})
 
-# Silent Manual Deletion (No Telegram Notification)
 @app.route('/api/delete_alert', methods=['POST'])
 def delete_alert():
     data = request.json
-    sym = data.get('symbol', '').upper()
-    price = float(data.get('price', 0))
-
     alerts = load_alerts()
-    alerts = [a for a in alerts if not (a['symbol'].lower() == sym.lower() and abs(float(a['price']) - price) < 0.0001)]
+    
+    if data.get('type') in ['ema_9_20', 'ema_200']:
+        alerts = [a for a in alerts if not (a.get('type') == data.get('type') and a.get('symbol') == data.get('symbol') and a.get('tf') == data.get('tf'))]
+    else:
+        sym = data.get('symbol', '').upper()
+        price = float(data.get('price', 0))
+        alerts = [a for a in alerts if not (a.get('symbol', '').lower() == sym.lower() and abs(float(a.get('price', 0)) - price) < 0.0001)]
+        
     save_alerts(alerts)
-    return jsonify({"status": "deleted"})
+    return jsonify({"status": "deleted", "alerts": alerts})
 
 @app.route('/api/clear_alerts', methods=['POST'])
 def clear_alerts():
