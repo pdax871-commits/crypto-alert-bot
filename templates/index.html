@@ -22,7 +22,7 @@
         html, body { width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); color: var(--text-color); }
         
         header { display: flex; justify-content: space-between; align-items: center; padding: 0 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); height: 60px; }
-        .top-left, .top-right, .top-center { display: flex; align-items: center; gap: 12px; }
+        .top-left, .top-right { display: flex; align-items: center; gap: 12px; }
         
         .status-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; color: white; transition: 0.3s; }
         .status-btn.active { background-color: #0ecb81; }
@@ -45,20 +45,25 @@
 
         #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
         #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 10px 15px; cursor: pointer; }
+
+        /* Requirement 5: Toast Pop-up Notification (Bottom Right) */
+        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
+        .toast { background-color: #0ecb81; color: white; padding: 12px 20px; border-radius: 6px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.3); animation: slideIn 0.3s ease-out; }
+        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
     </style>
 </head>
 <body>
 
     <header>
         <div class="top-left">
-            <select id="symbol-select" onchange="loadChartData(true)">
+            <select id="symbol-select" onchange="onSymbolOrTfChange()">
                 <option value="BTCUSDT">BTC/USDT</option>
                 <option value="ETHUSDT">ETH/USDT</option>
                 <option value="SOLUSDT">SOL/USDT</option>
                 <option value="BNBUSDT">BNB/USDT</option>
             </select>
             
-            <select id="tf-select" onchange="changeTF(this.value)">
+            <select id="tf-select" onchange="onSymbolOrTfChange()">
                 <option value="1m">1m</option>
                 <option value="5m">5m</option>
                 <option value="15m" selected>15m</option>
@@ -67,12 +72,10 @@
             </select>
         </div>
 
-        <div class="top-center">
+        <!-- Requirement 3: EMA Buttons moved to Right side -->
+        <div class="top-right">
             <button id="ema-9-20-btn" class="status-btn inactive" onclick="toggleAlertState('ema_9_20')">9-20 EMA Cross Alert</button>
             <button id="ema-200-btn" class="status-btn inactive" onclick="toggleAlertState('ema_200')">200 EMA Touch Alert</button>
-        </div>
-
-        <div class="top-right">
             <button class="action-btn" onclick="openAlertsModal()">🔔 Active Alerts</button>
             <button onclick="toggleTheme()">Theme 🌗</button>
         </div>
@@ -85,7 +88,10 @@
         </div>
     </div>
 
-    <!-- Active Alerts List Modal -->
+    <!-- Toast Notification Container -->
+    <div id="toast-container"></div>
+
+    <!-- Active Alerts Modal -->
     <div id="alerts-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -119,7 +125,7 @@
         </div>
     </div>
 
-    <!-- Confirm Delete Modal (Triggered when left clicking a line) -->
+    <!-- Confirm Delete Modal -->
     <div id="confirm-delete-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -146,10 +152,19 @@
         let isDark = true;
         let isFirstLoad = true;
 
-        // Persist EMA States using localStorage
-        let isEma920Active = localStorage.getItem('isEma920Active') === 'true';
-        let isEma200Active = localStorage.getItem('isEma200Active') === 'true';
+        let isEma920Active = false;
+        let isEma200Active = false;
+        let lastCrossCandleTime = 0;
         let lastEma200TouchedTime = 0;
+
+        function showToast(msg) {
+            const container = document.getElementById('toast-container');
+            const toast = document.createElement('div');
+            toast.className = 'toast';
+            toast.innerText = msg;
+            container.appendChild(toast);
+            setTimeout(() => { toast.remove(); }, 3500);
+        }
 
         function toggleTheme() {
             isDark = !isDark;
@@ -229,14 +244,12 @@
                 }
             });
 
-            // Strict Line Click Delete Detection (Shows Confirmation Modal First)
             chart.subscribeClick((param) => {
                 if (!param.point || !activeAlerts || activeAlerts.length === 0) return;
 
                 const clickedChartPrice = candlestickSeries.coordinateToPrice(param.point.y);
                 if (!clickedChartPrice) return;
 
-                // Precision threshold (0.05%) to avoid accidental clicks from distance
                 const matchedAlert = activeAlerts.find(a => {
                     return a.symbol.toUpperCase() === currentSymbol.toUpperCase() && 
                            Math.abs(parseFloat(a.price) - clickedChartPrice) / parseFloat(a.price) < 0.0005;
@@ -252,9 +265,20 @@
             });
         }
 
-        async function loadChartData(resetZoom = false) {
+        // Requirement 1 Fix: Reset EMA buttons to OFF when changing symbol or timeframe
+        function onSymbolOrTfChange() {
             currentSymbol = document.getElementById('symbol-select').value;
+            currentTF = document.getElementById('tf-select').value;
+            
+            isEma920Active = false;
+            isEma200Active = false;
+            updateButtonUI(document.getElementById('ema-9-20-btn'), false);
+            updateButtonUI(document.getElementById('ema-200-btn'), false);
 
+            loadChartData(true);
+        }
+
+        async function loadChartData(resetZoom = false) {
             try {
                 const res = await fetch(`/api/klines?symbol=${currentSymbol}&interval=${currentTF}`);
                 const data = await res.json();
@@ -295,30 +319,39 @@
             refreshPriceLines();
         }
 
+        // Requirement 2: Check Crossover ONLY AFTER CANDLE CLOSE (Checked at index -2)
         function checkTechnicalAlerts(candles, ema9, ema20, ema200) {
-            if (candles.length < 2 || ema9.length < 2 || ema20.length < 2 || ema200.length < 1) return;
+            if (candles.length < 3 || ema9.length < 3 || ema20.length < 3 || ema200.length < 2) return;
 
-            const lastIndex = candles.length - 1;
-            const currCandle = candles[lastIndex];
-            const currEma9 = ema9[ema9.length - 1].value;
-            const currEma20 = ema20[ema20.length - 1].value;
-            const prevEma9 = ema9[ema9.length - 2].value;
-            const prevEma20 = ema20[ema20.length - 2].value;
-            const currEma200 = ema200[ema200.length - 1].value;
+            // Index -1 is current forming candle, Index -2 is last CLOSED candle
+            const closedCandleIndex = candles.length - 2;
+            const closedCandle = candles[closedCandleIndex];
 
+            const ema9_closed = ema9[ema9.length - 2].value;
+            const ema20_closed = ema20[ema20.length - 2].value;
+            const ema9_prev = ema9[ema9.length - 3].value;
+            const ema20_prev = ema20[ema20.length - 3].value;
+            const ema200_closed = ema200[ema200.length - 2].value;
+
+            // 1. EMA 9-20 Closed Candle Cross Check
             if (isEma920Active) {
-                if (prevEma9 <= prevEma20 && currEma9 > currEma20) {
-                    triggerInstantAlert(currentSymbol, currCandle.close, `🚨 9-20 EMA BULLISH CROSSOVER (${currentTF})`);
-                } else if (prevEma9 >= prevEma20 && currEma9 < currEma20) {
-                    triggerInstantAlert(currentSymbol, currCandle.close, `⚠️ 9-20 EMA BEARISH CROSSOVER (${currentTF})`);
+                if (closedCandle.time !== lastCrossCandleTime) {
+                    if (ema9_prev <= ema20_prev && ema9_closed > ema20_closed) {
+                        lastCrossCandleTime = closedCandle.time;
+                        triggerInstantAlert(currentSymbol, closedCandle.close, `🚨 9-20 EMA BULLISH CROSSOVER (${currentTF})`);
+                    } else if (ema9_prev >= ema20_prev && ema9_closed < ema20_closed) {
+                        lastCrossCandleTime = closedCandle.time;
+                        triggerInstantAlert(currentSymbol, closedCandle.close, `⚠️ 9-20 EMA BEARISH CROSSOVER (${currentTF})`);
+                    }
                 }
             }
 
+            // 2. 200 EMA Closed Candle Touch Check
             if (isEma200Active) {
-                if (currCandle.low <= currEma200 && currCandle.high >= currEma200) {
-                    if (currCandle.time !== lastEma200TouchedTime) {
-                        lastEma200TouchedTime = currCandle.time;
-                        triggerInstantAlert(currentSymbol, currCandle.close, `🎯 PRICE TOUCHED 200 EMA (${currentTF})`);
+                if (closedCandle.low <= ema200_closed && closedCandle.high >= ema200_closed) {
+                    if (closedCandle.time !== lastEma200TouchedTime) {
+                        lastEma200TouchedTime = closedCandle.time;
+                        triggerInstantAlert(currentSymbol, closedCandle.close, `🎯 PRICE TOUCHED 200 EMA (${currentTF})`);
                     }
                 }
             }
@@ -332,19 +365,12 @@
             });
         }
 
-        function changeTF(tf) {
-            currentTF = tf;
-            loadChartData(true);
-        }
-
         function toggleAlertState(type) {
             if (type === 'ema_9_20') {
                 isEma920Active = !isEma920Active;
-                localStorage.setItem('isEma920Active', isEma920Active);
                 updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
             } else if (type === 'ema_200') {
                 isEma200Active = !isEma200Active;
-                localStorage.setItem('isEma200Active', isEma200Active);
                 updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
             }
         }
@@ -376,10 +402,10 @@
             });
 
             closeModal('add-alert-modal');
+            showToast(`✅ Horizontal Alert set for ${currentSymbol} at $${price}`);
             fetchServerAlerts();
         }
 
-        // Silent Delete Modal Prompt
         function promptDeleteAlert(symbol, price) {
             document.getElementById('delete-alert-text').innerText = `Delete alert for ${symbol} at $${price}?`;
             const confirmBtn = document.getElementById('confirm-delete-btn');
@@ -390,19 +416,20 @@
             document.getElementById('confirm-delete-modal').style.display = 'flex';
         }
 
-        // Silent Delete Action (Calls /api/delete_alert instead of trigger)
         async function deleteSingleAlert(symbol, price) {
             await fetch('/api/delete_alert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ symbol: symbol, price: price })
             });
+            showToast(`🗑️ Alert removed for ${symbol} at $${price}`);
             fetchServerAlerts();
         }
 
         async function clearAllAlerts() {
             await fetch('/api/clear_alerts', { method: 'POST' });
             closeModal('alerts-modal');
+            showToast(`🗑️ All alerts cleared`);
             fetchServerAlerts();
         }
 
@@ -414,6 +441,7 @@
             document.getElementById(id).style.display = 'none';
         }
 
+        // Requirement 4: Renders ALL alerts regardless of instrument
         async function fetchServerAlerts() {
             try {
                 const res = await fetch('/api/get_alerts');
@@ -470,11 +498,6 @@
 
         window.onload = async () => {
             initChart();
-            
-            // Restore saved EMA button states
-            updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
-            updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
-
             await fetchServerAlerts();
             await loadChartData(true);
             
