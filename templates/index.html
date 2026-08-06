@@ -266,17 +266,13 @@
         }
 
         // Requirement 1 Fix: Reset EMA buttons to OFF when changing symbol or timeframe
-        function onSymbolOrTfChange() {
-            currentSymbol = document.getElementById('symbol-select').value;
-            currentTF = document.getElementById('tf-select').value;
-            
-            isEma920Active = false;
-            isEma200Active = false;
-            updateButtonUI(document.getElementById('ema-9-20-btn'), false);
-            updateButtonUI(document.getElementById('ema-200-btn'), false);
-
-            loadChartData(true);
-        }
+     function onSymbolOrTfChange() {
+    currentSymbol = document.getElementById('symbol-select').value;
+    currentTF = document.getElementById('tf-select').value;
+    
+    // Auto Reset ko HATA DIYA hai taaki state manual off hone tak persistent rahe
+    loadChartData(true);
+}
 
         async function loadChartData(resetZoom = false) {
             try {
@@ -365,15 +361,17 @@
             });
         }
 
-        function toggleAlertState(type) {
-            if (type === 'ema_9_20') {
-                isEma920Active = !isEma920Active;
-                updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
-            } else if (type === 'ema_200') {
-                isEma200Active = !isEma200Active;
-                updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
-            }
-        }
+     function toggleAlertState(type) {
+    if (type === 'ema_9_20') {
+        isEma920Active = !isEma920Active;
+        localStorage.setItem('isEma920Active', isEma920Active);
+        updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
+    } else if (type === 'ema_200') {
+        isEma200Active = !isEma200Active;
+        localStorage.setItem('isEma200Active', isEma200Active);
+        updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
+    }
+}
 
         function updateButtonUI(btn, status) {
             if (status) {
@@ -442,37 +440,74 @@
         }
 
         // Requirement 4: Renders ALL alerts regardless of instrument
-        async function fetchServerAlerts() {
-            try {
-                const res = await fetch('/api/get_alerts');
-                activeAlerts = await res.json();
+   async function fetchServerAlerts() {
+    try {
+        const res = await fetch('/api/get_alerts');
+        activeAlerts = await res.json();
 
-                const modalAlertsContainer = document.getElementById('modal-alerts-list');
-                modalAlertsContainer.innerHTML = '';
+        const modalAlertsContainer = document.getElementById('modal-alerts-list');
+        modalAlertsContainer.innerHTML = '';
 
-                if (!activeAlerts || activeAlerts.length === 0) {
-                    modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
-                } else {
-                    activeAlerts.forEach(alert => {
-                        const item = document.createElement('div');
-                        item.className = 'alert-card';
-                        item.innerHTML = `
-                            <div>
-                                <strong>${alert.symbol.toUpperCase()}</strong> @ $${parseFloat(alert.price).toFixed(4)}<br/>
-                                <small>${alert.message || 'Level Reached'}</small>
-                            </div>
-                            <button class="del-btn" onclick="promptDeleteAlert('${alert.symbol}', ${alert.price})">Delete</button>
-                        `;
-                        modalAlertsContainer.appendChild(item);
-                    });
-                }
+        let hasAnyAlert = false;
 
-                refreshPriceLines();
-            } catch (e) {
-                console.error("Error fetching alerts:", e);
-            }
+        // 1. Show 9-20 EMA Cross Status if ACTIVE
+        if (isEma920Active) {
+            hasAnyAlert = true;
+            const item = document.createElement('div');
+            item.className = 'alert-card';
+            item.style.borderColor = '#0ecb81';
+            item.innerHTML = `
+                <div>
+                    <strong>9-20 EMA Crossover Alert</strong><br/>
+                    <small style="color: #0ecb81;">Status: ACTIVE (Auto Scanning)</small>
+                </div>
+                <button class="del-btn" onclick="toggleAlertState('ema_9_20'); fetchServerAlerts();">Turn OFF</button>
+            `;
+            modalAlertsContainer.appendChild(item);
         }
 
+        // 2. Show 200 EMA Touch Status if ACTIVE
+        if (isEma200Active) {
+            hasAnyAlert = true;
+            const item = document.createElement('div');
+            item.className = 'alert-card';
+            item.style.borderColor = '#0ecb81';
+            item.innerHTML = `
+                <div>
+                    <strong>200 EMA Touch Alert</strong><br/>
+                    <small style="color: #0ecb81;">Status: ACTIVE (Auto Scanning)</small>
+                </div>
+                <button class="del-btn" onclick="toggleAlertState('ema_200'); fetchServerAlerts();">Turn OFF</button>
+            `;
+            modalAlertsContainer.appendChild(item);
+        }
+
+        // 3. Render Horizontal Level Alerts
+        if (activeAlerts && activeAlerts.length > 0) {
+            hasAnyAlert = true;
+            activeAlerts.forEach(alert => {
+                const item = document.createElement('div');
+                item.className = 'alert-card';
+                item.innerHTML = `
+                    <div>
+                        <strong>${alert.symbol.toUpperCase()}</strong> @ $${parseFloat(alert.price).toFixed(4)}<br/>
+                        <small>${alert.message || 'Level Reached'}</small>
+                    </div>
+                    <button class="del-btn" onclick="promptDeleteAlert('${alert.symbol}', ${alert.price})">Delete</button>
+                `;
+                modalAlertsContainer.appendChild(item);
+            });
+        }
+
+        if (!hasAnyAlert) {
+            modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
+        }
+
+        refreshPriceLines();
+    } catch (e) {
+        console.error("Error fetching alerts:", e);
+    }
+}
         function refreshPriceLines() {
             Object.values(priceLineMap).forEach(line => {
                 try { candlestickSeries.removePriceLine(line); } catch(e){}
