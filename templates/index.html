@@ -36,7 +36,7 @@
         #chart { width: 100%; height: 100%; display: block; }
 
         .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); display: none; justify-content: center; align-items: center; z-index: 2000; }
-        .modal-content { background-color: var(--card-bg); width: 420px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
+        .modal-content { background-color: var(--card-bg); width: 450px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.4); }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
         .modal-body { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; max-height: 50vh; }
         
@@ -146,9 +146,6 @@
         let isDark = true;
         let isFirstLoad = true;
 
-        // READ STRICTLY FROM LOCALSTORAGE (FIX: Refresh state retention)
-        let isEma920Active = localStorage.getItem('isEma920Active') === 'true';
-        let isEma200Active = localStorage.getItem('isEma200Active') === 'true';
         let lastCrossCandleTime = 0;
         let lastEma200TouchedTime = 0;
 
@@ -260,11 +257,20 @@
             });
         }
 
-        // PERSISTENCE FIX: Symbol / Timeframe badalne par state OFF nahi hogi
+        // Instrument ya TF change par UI buttons Auto-Reset (Red) honge
         function onSymbolOrTfChange() {
             currentSymbol = document.getElementById('symbol-select').value;
             currentTF = document.getElementById('tf-select').value;
+            syncButtonUI();
             loadChartData(true);
+        }
+
+        function syncButtonUI() {
+            const hasEma920 = activeAlerts.some(a => a.type === 'ema_9_20' && a.symbol === currentSymbol && a.tf === currentTF);
+            const hasEma200 = activeAlerts.some(a => a.type === 'ema_200' && a.symbol === currentSymbol && a.tf === currentTF);
+
+            updateButtonUI(document.getElementById('ema-9-20-btn'), hasEma920);
+            updateButtonUI(document.getElementById('ema-200-btn'), hasEma200);
         }
 
         async function loadChartData(resetZoom = false) {
@@ -308,9 +314,12 @@
             refreshPriceLines();
         }
 
-        // CANDLE CLOSE VALIDATION: Candle close hone par (-2 index) alert trigger hoga
+        // Candle Close Check (-2 Index)
         function checkTechnicalAlerts(candles, ema9, ema20, ema200) {
             if (candles.length < 3 || ema9.length < 3 || ema20.length < 3 || ema200.length < 2) return;
+
+            const isEma920Active = activeAlerts.some(a => a.type === 'ema_9_20' && a.symbol === currentSymbol && a.tf === currentTF);
+            const isEma200Active = activeAlerts.some(a => a.type === 'ema_200' && a.symbol === currentSymbol && a.tf === currentTF);
 
             const closedCandleIndex = candles.length - 2;
             const closedCandle = candles[closedCandleIndex];
@@ -351,17 +360,28 @@
             });
         }
 
-        function toggleAlertState(type) {
-            if (type === 'ema_9_20') {
-                isEma920Active = !isEma920Active;
-                localStorage.setItem('isEma920Active', isEma920Active);
-                updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
-            } else if (type === 'ema_200') {
-                isEma200Active = !isEma200Active;
-                localStorage.setItem('isEma200Active', isEma200Active);
-                updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
+        async function toggleAlertState(type) {
+            const isActive = activeAlerts.some(a => a.type === type && a.symbol === currentSymbol && a.tf === currentTF);
+
+            if (isActive) {
+                // Delete active alert
+                await fetch('/api/delete_alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: type, symbol: currentSymbol, tf: currentTF })
+                });
+                showToast(`🔴 Alert Turned OFF for ${currentSymbol} (${currentTF})`);
+            } else {
+                // Add active alert
+                await fetch('/api/add_alert', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ type: type, symbol: currentSymbol, tf: currentTF, message: `${type.toUpperCase()} Alert Active` })
+                });
+                showToast(`🟢 Alert Activated for ${currentSymbol} (${currentTF})`);
             }
-            fetchServerAlerts(); // Alert List update on toggle
+
+            fetchServerAlerts();
         }
 
         function updateButtonUI(btn, status) {
@@ -387,7 +407,7 @@
             await fetch('/api/add_alert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: currentSymbol, price: price, message: msg })
+                body: JSON.stringify({ type: 'price', symbol: currentSymbol, price: price, message: msg })
             });
 
             closeModal('add-alert-modal');
@@ -409,7 +429,7 @@
             await fetch('/api/delete_alert', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: symbol, price: price })
+                body: JSON.stringify({ type: 'price', symbol: symbol, price: price })
             });
             showToast(`🗑️ Alert removed for ${symbol} at $${price}`);
             fetchServerAlerts();
@@ -430,7 +450,6 @@
             document.getElementById(id).style.display = 'none';
         }
 
-        // ALL ALERTS IN MODAL: Indicator Alerts + Horizontal Level Alerts
         async function fetchServerAlerts() {
             try {
                 const res = await fetch('/api/get_alerts');
@@ -439,65 +458,51 @@
                 const modalAlertsContainer = document.getElementById('modal-alerts-list');
                 modalAlertsContainer.innerHTML = '';
 
-                let hasAnyAlert = false;
-
-                // 1. Render 9-20 EMA Alert Status
-                if (isEma920Active) {
-                    hasAnyAlert = true;
-                    const item = document.createElement('div');
-                    item.className = 'alert-card';
-                    item.style.borderColor = '#0ecb81';
-                    item.innerHTML = `
-                        <div>
-                            <strong>9-20 EMA Crossover Alert</strong><br/>
-                            <small style="color: #0ecb81;">Status: ACTIVE (Auto Scanning)</small>
-                        </div>
-                        <button class="del-btn" onclick="toggleAlertState('ema_9_20')">Turn OFF</button>
-                    `;
-                    modalAlertsContainer.appendChild(item);
-                }
-
-                // 2. Render 200 EMA Touch Alert Status
-                if (isEma200Active) {
-                    hasAnyAlert = true;
-                    const item = document.createElement('div');
-                    item.className = 'alert-card';
-                    item.style.borderColor = '#0ecb81';
-                    item.innerHTML = `
-                        <div>
-                            <strong>200 EMA Touch Alert</strong><br/>
-                            <small style="color: #0ecb81;">Status: ACTIVE (Auto Scanning)</small>
-                        </div>
-                        <button class="del-btn" onclick="toggleAlertState('ema_200')">Turn OFF</button>
-                    `;
-                    modalAlertsContainer.appendChild(item);
-                }
-
-                // 3. Render Horizontal Price Level Alerts
-                if (activeAlerts && activeAlerts.length > 0) {
-                    hasAnyAlert = true;
+                if (!activeAlerts || activeAlerts.length === 0) {
+                    modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
+                } else {
                     activeAlerts.forEach(alert => {
                         const item = document.createElement('div');
                         item.className = 'alert-card';
-                        item.innerHTML = `
-                            <div>
-                                <strong>${alert.symbol.toUpperCase()}</strong> @ $${parseFloat(alert.price).toFixed(4)}<br/>
-                                <small>${alert.message || 'Level Reached'}</small>
-                            </div>
-                            <button class="del-btn" onclick="promptDeleteAlert('${alert.symbol}', ${alert.price})">Delete</button>
-                        `;
+
+                        if (alert.type === 'ema_9_20' || alert.type === 'ema_200') {
+                            const name = alert.type === 'ema_9_20' ? '9-20 EMA Cross' : '200 EMA Touch';
+                            item.style.borderColor = '#0ecb81';
+                            item.innerHTML = `
+                                <div>
+                                    <strong>${name}</strong> (${alert.symbol} - ${alert.tf})<br/>
+                                    <small style="color: #0ecb81;">Status: ACTIVE</small>
+                                </div>
+                                <button class="del-btn" onclick="toggleSpecificEma('${alert.type}', '${alert.symbol}', '${alert.tf}')">Turn OFF</button>
+                            `;
+                        } else {
+                            item.innerHTML = `
+                                <div>
+                                    <strong>${alert.symbol.toUpperCase()}</strong> @ $${parseFloat(alert.price).toFixed(4)}<br/>
+                                    <small>${alert.message || 'Level Reached'}</small>
+                                </div>
+                                <button class="del-btn" onclick="promptDeleteAlert('${alert.symbol}', ${alert.price})">Delete</button>
+                            `;
+                        }
                         modalAlertsContainer.appendChild(item);
                     });
                 }
 
-                if (!hasAnyAlert) {
-                    modalAlertsContainer.innerHTML = '<p style="text-align: center; opacity: 0.6;">No Active Alerts</p>';
-                }
-
+                syncButtonUI();
                 refreshPriceLines();
             } catch (e) {
                 console.error("Error fetching alerts:", e);
             }
+        }
+
+        async function toggleSpecificEma(type, symbol, tf) {
+            await fetch('/api/delete_alert', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ type: type, symbol: symbol, tf: tf })
+            });
+            showToast(`🔴 Alert Turned OFF for ${symbol} (${tf})`);
+            fetchServerAlerts();
         }
 
         function refreshPriceLines() {
@@ -508,7 +513,7 @@
 
             if (activeAlerts && activeAlerts.length > 0) {
                 activeAlerts.forEach((alert, idx) => {
-                    if (alert.symbol.toUpperCase() === currentSymbol.toUpperCase()) {
+                    if (alert.type === 'price' && alert.symbol.toUpperCase() === currentSymbol.toUpperCase()) {
                         const line = candlestickSeries.createPriceLine({
                             price: parseFloat(alert.price),
                             color: '#ff9800',
@@ -525,11 +530,6 @@
 
         window.onload = async () => {
             initChart();
-
-            // SYNC UI ON LOAD FROM LOCALSTORAGE
-            updateButtonUI(document.getElementById('ema-9-20-btn'), isEma920Active);
-            updateButtonUI(document.getElementById('ema-200-btn'), isEma200Active);
-
             await fetchServerAlerts();
             await loadChartData(true);
             
