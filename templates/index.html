@@ -3,101 +3,111 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoPulse AI | Private Terminal</title>
+    <title>CryptoPulse AI | Terminal</title>
     <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
             --bg-color: #0b0e14;
             --card-bg: #151922;
-            --border-color: #222734;
-            --text-color: #d1d4dc;
+            --card-border: #222734;
+            --text-main: #e0e6ed;
             --text-muted: #848e9c;
             --accent-green: #0ecb81;
             --accent-red: #f6465d;
-            --accent-glow: rgba(14, 203, 129, 0.2);
+            --ema-9-color: #00b0ff;
+            --ema-20-color: #ffb300;
+            --ema-200-color: #ff4081;
+            --glow-green: rgba(14, 203, 129, 0.25);
+            --glow-red: rgba(246, 70, 93, 0.25);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-        html, body { width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); color: var(--text-color); }
+        html, body { width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); color: var(--text-main); }
 
         .screen { width: 100vw; height: 100vh; display: none; flex-direction: column; }
         .screen.active { display: flex; }
 
-        /* --- AUTH LOCK SCREEN --- */
-        #auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(11, 14, 20, 0.95); backdrop-filter: blur(10px); display: flex; justify-content: center; align-items: center; z-index: 9999; }
-        .auth-card { background: var(--card-bg); border: 1px solid var(--border-color); padding: 40px; border-radius: 12px; width: 360px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
-        .auth-card h2 { color: #fff; margin-bottom: 8px; font-size: 22px; }
-        .auth-card p { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; }
-        .auth-card input { width: 100%; padding: 12px; background: var(--bg-color); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; font-size: 16px; text-align: center; margin-bottom: 16px; outline: none; }
-        .auth-card button { width: 100%; padding: 12px; background: var(--accent-green); color: #000; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; }
+        /* --- AUTH OVERLAY --- */
+        #auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(11, 14, 20, 0.96); backdrop-filter: blur(12px); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .auth-card { background: var(--card-bg); border: 1px solid var(--card-border); padding: 36px; border-radius: 12px; width: 340px; text-align: center; box-shadow: 0 20px 40px rgba(0,0,0,0.6); }
+        .auth-card h2 { color: #fff; margin-bottom: 6px; font-size: 20px; }
+        .auth-card p { color: var(--text-muted); font-size: 13px; margin-bottom: 20px; }
+        .auth-card input { width: 100%; padding: 12px; background: var(--bg-color); border: 1px solid var(--card-border); color: #fff; border-radius: 6px; font-size: 16px; text-align: center; margin-bottom: 16px; outline: none; }
+        .auth-card button { width: 100%; padding: 12px; background: var(--accent-green); color: #000; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; }
 
-        /* --- LANDING PAGE STYLES --- */
-        #landing-screen { overflow-y: auto; background: radial-gradient(circle at top right, #1a2235 0%, #0b0e14 60%); }
-        .navbar { display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; border-bottom: 1px solid var(--border-color); background: rgba(21, 25, 34, 0.8); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; }
-        .brand-logo { font-size: 22px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px; }
+        /* --- LANDING SCREEN --- */
+        #landing-screen { overflow-y: auto; background: radial-gradient(circle at top right, #161e2e 0%, #0b0e14 60%); }
+        .navbar { display: flex; justify-content: space-between; align-items: center; padding: 16px 36px; border-bottom: 1px solid var(--card-border); background: rgba(21, 25, 34, 0.85); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; }
+        .brand-logo { font-size: 20px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px; }
         .brand-logo span { color: var(--accent-green); }
-        .nav-links { display: flex; gap: 24px; align-items: center; }
-        .nav-link { color: var(--text-muted); cursor: pointer; font-weight: 500; }
-        .btn-launch-nav { background: var(--accent-green); color: #000; padding: 10px 20px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; }
+        .nav-links { display: flex; gap: 20px; align-items: center; }
+        .btn-launch-nav { background: var(--accent-green); color: #000; padding: 8px 18px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; }
 
-        .hero-section { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 60px 20px 30px; max-width: 900px; margin: 0 auto; }
-        .badge-tag { background: rgba(14, 203, 129, 0.1); color: var(--accent-green); border: 1px solid rgba(14, 203, 129, 0.3); padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 20px; }
-        .hero-title { font-size: 44px; font-weight: 800; color: #fff; margin-bottom: 16px; }
+        .hero-section { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 60px 20px 30px; max-width: 850px; margin: 0 auto; }
+        .badge-tag { background: rgba(14, 203, 129, 0.1); color: var(--accent-green); border: 1px solid rgba(14, 203, 129, 0.3); padding: 5px 14px; border-radius: 20px; font-size: 12px; font-weight: 600; margin-bottom: 20px; }
+        .hero-title { font-size: 42px; font-weight: 800; color: #fff; margin-bottom: 16px; }
         .hero-title span { background: linear-gradient(135deg, #0ecb81 0%, #00f2fe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
         .hero-subtitle { font-size: 16px; color: var(--text-muted); margin-bottom: 30px; max-width: 650px; }
+        .quote-banner { background: var(--card-bg); border-y: 1px solid var(--card-border); padding: 14px; text-align: center; color: var(--accent-green); font-weight: 600; font-style: italic; margin-bottom: 40px; }
+        .btn-primary-cta { background: linear-gradient(135deg, #0ecb81 0%, #00b0ff 100%); color: #000; font-size: 17px; font-weight: 800; padding: 14px 32px; border-radius: 8px; border: none; cursor: pointer; }
+
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto 60px; padding: 0 20px; width: 100%; }
+        .feature-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 24px; }
+        .feature-card h3 { color: #fff; font-size: 17px; margin-bottom: 10px; }
+        .feature-card p { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+
+        /* --- CHART TERMINAL HEADER & TICKER --- */
+        .terminal-header { display: flex; justify-content: space-between; align-items: center; padding: 0 16px; background-color: var(--card-bg); border-bottom: 1px solid var(--card-border); height: 52px; }
+        .header-left, .header-right { display: flex; align-items: center; gap: 10px; }
+        .nav-back-btn { background: transparent; border: 1px solid var(--card-border); color: var(--text-main); padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+        .nav-back-btn:hover { border-color: var(--text-main); }
+
+        select, button, input { padding: 6px 12px; background-color: var(--bg-color); color: var(--text-main); border: 1px solid var(--card-border); border-radius: 4px; font-size: 13px; outline: none; }
         
-        .quote-banner { background: var(--card-bg); border-y: 1px solid var(--border-color); padding: 16px; text-align: center; color: var(--accent-green); font-weight: 600; font-style: italic; margin-bottom: 40px; }
+        .status-pill { padding: 6px 14px; font-size: 12px; font-weight: 700; border-radius: 20px; border: 1px solid var(--card-border); cursor: pointer; transition: 0.3s; background: var(--bg-color); color: var(--text-muted); }
+        .status-pill.active-ema-920 { background: rgba(14, 203, 129, 0.12); color: var(--accent-green); border-color: var(--accent-green); box-shadow: 0 0 10px var(--glow-green); }
+        .status-pill.active-ema-200 { background: rgba(255, 64, 129, 0.12); color: var(--ema-200-color); border-color: var(--ema-200-color); box-shadow: 0 0 10px var(--glow-red); }
+        .status-pill.inactive { background: rgba(246, 70, 93, 0.1); color: var(--accent-red); border-color: rgba(246, 70, 93, 0.3); }
 
-        .cta-group { display: flex; gap: 16px; justify-content: center; margin-bottom: 40px; }
-        .btn-primary-cta { background: linear-gradient(135deg, #0ecb81 0%, #00b0ff 100%); color: #000; font-size: 18px; font-weight: 800; padding: 14px 32px; border-radius: 8px; border: none; cursor: pointer; }
+        .ticker-bar { display: flex; align-items: center; gap: 24px; padding: 6px 16px; background-color: #0e121a; border-bottom: 1px solid var(--card-border); font-size: 12px; font-weight: 600; color: var(--text-muted); height: 32px; }
+        .ticker-val { color: #fff; font-family: monospace; }
+        .ticker-val.up { color: var(--accent-green); }
 
-        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 1100px; margin: 0 auto 60px; padding: 0 20px; width: 100%; }
-        .feature-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; }
-        .feature-card h3 { color: #fff; font-size: 18px; margin-bottom: 10px; }
-        .feature-card p { color: var(--text-muted); font-size: 14px; line-height: 1.5; }
-
-        /* --- CHART TERMINAL STYLES --- */
-        header { display: flex; justify-content: space-between; align-items: center; padding: 0 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); height: 60px; }
-        .top-left, .top-right { display: flex; align-items: center; gap: 12px; }
-
-        .nav-back-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-color); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-
-        .status-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; color: white; }
-        .status-btn.active { background-color: var(--accent-green); }
-        .status-btn.inactive { background-color: var(--accent-red); }
-
-        .action-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--card-bg); color: var(--text-color); cursor: pointer; }
-
-        select, button, input { padding: 8px 12px; background-color: var(--bg-color); color: var(--text-color); border: 1px solid var(--border-color); border-radius: 4px; }
-
-        .main-container { width: 100vw; height: calc(100vh - 60px); position: relative; display: block; }
+        /* --- CHART & LEGEND CONTAINERS --- */
+        .main-container { width: 100vw; height: calc(100vh - 108px); position: relative; display: block; }
         #chart { width: 100%; height: 100%; display: block; }
 
+        .ema-legend-overlay { position: absolute; top: 12px; left: 16px; z-index: 10; display: flex; gap: 12px; background: rgba(15, 18, 26, 0.85); backdrop-filter: blur(6px); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--card-border); font-size: 12px; font-family: monospace; }
+        .legend-item { display: flex; align-items: center; gap: 6px; }
+        .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+
+        .bottom-status-strip { height: 24px; background: var(--card-bg); border-top: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; padding: 0 16px; font-size: 11px; color: var(--text-muted); }
+
         /* --- MODALS & TOASTS --- */
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 2000; }
-        .modal-content { background-color: var(--card-bg); width: 450px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; }
-        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
-        .modal-body { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; max-height: 50vh; }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.75); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background-color: var(--card-bg); width: 420px; border-radius: 8px; border: 1px solid var(--card-border); display: flex; flex-direction: column; padding: 20px; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--card-border); padding-bottom: 10px; }
+        .modal-body { overflow-y: auto; display: flex; flex-direction: column; gap: 10px; max-height: 50vh; }
 
-        .alert-card { background-color: var(--bg-color); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
-        .alert-card .del-btn { background-color: var(--accent-red); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
+        .alert-card { background-color: var(--bg-color); padding: 10px 14px; border-radius: 6px; border: 1px solid var(--card-border); display: flex; justify-content: space-between; align-items: center; font-size: 13px; }
+        .alert-card .del-btn { background-color: var(--accent-red); color: white; border: none; padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 11px; }
 
-        #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; }
-        #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 10px 15px; cursor: pointer; }
+        #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 4px; z-index: 1000; }
+        #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 8px 12px; cursor: pointer; }
 
-        #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
-        .toast { background-color: var(--accent-green); color: black; padding: 12px 20px; border-radius: 6px; font-weight: bold; }
+        #toast-container { position: fixed; bottom: 32px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 8px; }
+        .toast { background-color: var(--accent-green); color: black; padding: 10px 16px; border-radius: 6px; font-weight: bold; font-size: 12px; }
     </style>
 </head>
 <body>
 
-    <!-- AUTH LOCK OVERLAY -->
+    <!-- AUTH OVERLAY -->
     <div id="auth-overlay">
         <div class="auth-card">
-            <h2>🔒 Access Locked</h2>
-            <p>Enter Admin Password to access terminal</p>
-            <input type="password" id="admin-pass-input" placeholder="Enter Password" onkeydown="if(event.key==='Enter') authenticate()" />
-            <button onclick="authenticate()">Unlock Dashboard</button>
+            <h2>🔒 Terminal Access</h2>
+            <p>Enter password to unlock private dashboard</p>
+            <input type="password" id="admin-pass-input" placeholder="Password" onkeydown="if(event.key==='Enter') authenticate()" />
+            <button onclick="authenticate()">Unlock</button>
             <p id="auth-error" style="color: var(--accent-red); font-size: 12px; margin-top: 10px; display: none;">Invalid Password!</p>
         </div>
     </div>
@@ -107,7 +117,7 @@
         <nav class="navbar">
             <div class="brand-logo">⚡ CRYPTO<span>PULSE</span></div>
             <div class="nav-links">
-                <span class="nav-link" onclick="openTerminal()">Terminal</span>
+                <span class="nav-link" onclick="openTerminal()" style="cursor:pointer;">Terminal</span>
                 <button class="btn-launch-nav" onclick="openTerminal()">Launch Terminal 🚀</button>
                 <button onclick="logout()" style="background: transparent; color: var(--accent-red); border:1px solid var(--accent-red); cursor:pointer;">Lock 🔒</button>
             </div>
@@ -144,8 +154,8 @@
 
     <!-- CHART TERMINAL SCREEN -->
     <div id="terminal-screen" class="screen">
-        <header>
-            <div class="top-left">
+        <header class="terminal-header">
+            <div class="header-left">
                 <button class="nav-back-btn" onclick="openLanding()">← Home</button>
                 <select id="symbol-select" onchange="onSymbolOrTfChange()">
                     <option value="BTCUSDT">BTC/USDT</option>
@@ -163,23 +173,45 @@
                 </select>
             </div>
 
-            <div class="top-right">
-                <button id="ema-9-20-btn" class="status-btn inactive" onclick="toggleAlertState('ema_9_20')">9-20 EMA Cross Alert</button>
-                <button id="ema-200-btn" class="status-btn inactive" onclick="toggleAlertState('ema_200')">200 EMA Touch Alert</button>
+            <div class="header-right">
+                <button id="ema-9-20-btn" class="status-pill inactive" onclick="toggleAlertState('ema_9_20')">9-20 EMA Cross</button>
+                <button id="ema-200-btn" class="status-pill inactive" onclick="toggleAlertState('ema_200')">200 EMA Touch</button>
                 <button class="action-btn" onclick="openAlertsModal()">🔔 Active Alerts</button>
             </div>
         </header>
 
+        <!-- LIVE TICKER BAR -->
+        <div class="ticker-bar">
+            <div>SYMBOL: <span id="ticker-sym" class="ticker-val">BTC/USDT</span></div>
+            <div>PRICE: <span id="ticker-price" class="ticker-val up">$0.00</span></div>
+            <div>24H HIGH: <span id="ticker-high" class="ticker-val">$0.00</span></div>
+            <div>24H LOW: <span id="ticker-low" class="ticker-val">$0.00</span></div>
+        </div>
+
         <div class="main-container">
+            <!-- EMA OVERLAY LEGEND -->
+            <div class="ema-legend-overlay">
+                <div class="legend-item"><div class="legend-dot" style="background: var(--ema-9-color);"></div> EMA 9: <span id="legend-ema9" style="color:#fff;">-</span></div>
+                <div class="legend-item"><div class="legend-dot" style="background: var(--ema-20-color);"></div> EMA 20: <span id="legend-ema20" style="color:#fff;">-</span></div>
+                <div class="legend-item"><div class="legend-dot" style="background: var(--ema-200-color);"></div> EMA 200: <span id="legend-ema200" style="color:#fff;">-</span></div>
+            </div>
+
             <div id="chart"></div>
             <div id="context-menu">
                 <button onclick="openAddAlertModal()">➕ Set Horizontal Alert Here</button>
             </div>
         </div>
+
+        <div class="bottom-status-strip">
+            <div>🟢 Server Engine: Online</div>
+            <div>⚡ 24/7 Scan Interval: 5s</div>
+            <div>MEXC Data Stream Connected</div>
+        </div>
     </div>
 
     <div id="toast-container"></div>
 
+    <!-- MODALS -->
     <div id="alerts-modal" class="modal-overlay">
         <div class="modal-content">
             <div class="modal-header">
@@ -325,30 +357,30 @@
         function initChart() {
             const container = document.getElementById('chart');
             const w = container.clientWidth || window.innerWidth;
-            const h = container.clientHeight || (window.innerHeight - 60);
+            const h = container.clientHeight || (window.innerHeight - 108);
 
             chart = LightweightCharts.createChart(container, {
                 width: w,
                 height: h,
-                layout: { backgroundColor: '#0b0e14', textColor: '#d1d4dc' },
-                grid: { vertLines: { color: '#222734' }, horzLines: { color: '#222734' } },
+                layout: { backgroundColor: '#0b0e14', textColor: '#848e9c' },
+                grid: { vertLines: { color: '#161b26' }, horzLines: { color: '#161b26' } },
                 crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
-                timeScale: { timeVisible: true, secondsVisible: false }
+                timeScale: { timeVisible: true, secondsVisible: false, rightOffset: 15 }
             });
 
             candlestickSeries = chart.addCandlestickSeries({
                 upColor: '#0ecb81', downColor: '#f6465d', borderVisible: false, wickUpColor: '#0ecb81', wickDownColor: '#f6465d'
             });
 
-            ema9Series = chart.addLineSeries({ color: '#2962ff', lineWidth: 1, title: 'EMA 9' });
-            ema20Series = chart.addLineSeries({ color: '#ff9800', lineWidth: 1, title: 'EMA 20' });
-            ema200Series = chart.addLineSeries({ color: '#e91e63', lineWidth: 2, title: 'EMA 200' });
+            ema9Series = chart.addLineSeries({ color: '#00b0ff', lineWidth: 1, title: '' });
+            ema20Series = chart.addLineSeries({ color: '#ffb300', lineWidth: 1, title: '' });
+            ema200Series = chart.addLineSeries({ color: '#ff4081', lineWidth: 2, title: '' });
 
             window.addEventListener('resize', () => {
                 if(chart) {
                     chart.applyOptions({
                         width: container.clientWidth || window.innerWidth,
-                        height: container.clientHeight || (window.innerHeight - 60)
+                        height: container.clientHeight || (window.innerHeight - 108)
                     });
                 }
             });
@@ -392,6 +424,7 @@
         function onSymbolOrTfChange() {
             currentSymbol = document.getElementById('symbol-select').value;
             currentTF = document.getElementById('tf-select').value;
+            document.getElementById('ticker-sym').innerText = currentSymbol;
             syncButtonUI();
             loadChartData(true);
         }
@@ -400,8 +433,8 @@
             const hasEma920 = activeAlerts.some(a => a.type === 'ema_9_20' && a.symbol === currentSymbol && a.tf === currentTF);
             const hasEma200 = activeAlerts.some(a => a.type === 'ema_200' && a.symbol === currentSymbol && a.tf === currentTF);
 
-            updateButtonUI(document.getElementById('ema-9-20-btn'), hasEma920);
-            updateButtonUI(document.getElementById('ema-200-btn'), hasEma200);
+            updateButtonUI('ema-9-20-btn', hasEma920, 'active-ema-920');
+            updateButtonUI('ema-200-btn', hasEma200, 'active-ema-200');
         }
 
         async function loadChartData(resetZoom = false) {
@@ -411,12 +444,20 @@
 
                 if (Array.isArray(data) && data.length > 0) {
                     let candles = [];
+                    let high24 = 0;
+                    let low24 = Infinity;
+
                     for (let c of data) {
+                        const h = parseFloat(c[2]);
+                        const l = parseFloat(c[3]);
+                        if (h > high24) high24 = h;
+                        if (l < low24) low24 = l;
+
                         candles.push({
                             time: Math.floor(c[0] / 1000),
                             open: parseFloat(c[1]),
-                            high: parseFloat(c[2]),
-                            low: parseFloat(c[3]),
+                            high: h,
+                            low: l,
                             close: parseFloat(c[4])
                         });
                     }
@@ -430,6 +471,16 @@
                     ema9Series.setData(ema9);
                     ema20Series.setData(ema20);
                     ema200Series.setData(ema200);
+
+                    // Update Overlay Legend & Ticker
+                    const lastClose = candles[candles.length - 1].close;
+                    document.getElementById('ticker-price').innerText = `$${lastClose.toFixed(2)}`;
+                    document.getElementById('ticker-high').innerText = `$${high24.toFixed(2)}`;
+                    document.getElementById('ticker-low').innerText = `$${low24.toFixed(2)}`;
+
+                    if (ema9.length > 0) document.getElementById('legend-ema9').innerText = `$${ema9[ema9.length - 1].value.toFixed(2)}`;
+                    if (ema20.length > 0) document.getElementById('legend-ema20').innerText = `$${ema20[ema20.length - 1].value.toFixed(2)}`;
+                    if (ema200.length > 0) document.getElementById('legend-ema200').innerText = `$${ema200[ema200.length - 1].value.toFixed(2)}`;
 
                     if (isFirstLoad || resetZoom) {
                         chart.timeScale().fitContent();
@@ -512,13 +563,12 @@
             fetchServerAlerts();
         }
 
-        function updateButtonUI(btn, status) {
+        function updateButtonUI(btnId, status, activeClass) {
+            const btn = document.getElementById(btnId);
             if (status) {
-                btn.classList.remove('inactive');
-                btn.classList.add('active');
+                btn.className = `status-pill ${activeClass}`;
             } else {
-                btn.classList.remove('active');
-                btn.classList.add('inactive');
+                btn.className = 'status-pill inactive';
             }
         }
 
@@ -655,11 +705,11 @@
                     if (alert.type === 'price' && alert.symbol.toUpperCase() === currentSymbol.toUpperCase()) {
                         const line = candlestickSeries.createPriceLine({
                             price: parseFloat(alert.price),
-                            color: '#ff9800',
-                            lineWidth: 2,
+                            color: '#ffb300',
+                            lineWidth: 1,
                             lineStyle: LightweightCharts.LineStyle.Dashed,
                             axisLabelVisible: true,
-                            title: alert.message || 'Alert Target',
+                            title: alert.message || 'Target',
                         });
                         priceLineMap[idx] = line;
                     }
