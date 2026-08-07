@@ -51,14 +51,59 @@
         .btn-primary-cta { background: linear-gradient(135deg, #0ecb81 0%, #00b0ff 100%); color: #000; font-size: 17px; font-weight: 800; padding: 14px 32px; border-radius: 8px; border: none; cursor: pointer; }
 
         /* --- CONTINUOUS GLOWING TICKER --- */
-        .ticker-container { width: 100%; overflow: hidden; background: #080a0f; border-y: 1px solid var(--card-border); padding: 18px 0; margin-bottom: 40px; position: relative; }
-        .ticker-track { display: flex; width: max-content; animation: marquee 25s linear infinite; }
-        .ticker-text { font-size: 28px; font-weight: 800; color: var(--accent-green); text-transform: uppercase; letter-spacing: 2px; white-space: nowrap; padding-right: 100px; text-shadow: 0 0 10px rgba(14, 203, 129, 0.8), 0 0 20px rgba(0, 176, 255, 0.5); }
+        .ticker-container {
+    max-width: 90%;
+    margin: 0 auto 40px auto;
+    overflow: hidden;
+    background: #080a0f;
+    border: 1px solid var(--card-border);
+    border-radius: 12px;
+    padding: 20px 0;
+    position: relative;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+      .ticker-track {
+    display: flex;
+    width: max-content;
+    /* Speed Increased: Reduced from 25s to 12s */
+    animation: marquee 12s linear infinite;
+}
+       .ticker-text {
+    font-size: 30px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    white-space: nowrap;
+    padding-right: 120px;
+    /* Continuous Color Changing Animation */
+    animation: neonGlowCycle 4s ease-in-out infinite alternate;
+}@keyframes neonGlowCycle {
+    0% {
+        color: #00f2fe;
+        text-shadow: 0 0 10px rgba(0, 242, 254, 0.8), 0 0 20px rgba(0, 242, 254, 0.5);
+    }
+    25% {
+        color: #0ecb81;
+        text-shadow: 0 0 10px rgba(14, 203, 129, 0.8), 0 0 20px rgba(14, 203, 129, 0.5);
+    }
+    50% {
+        color: #ffb300;
+        text-shadow: 0 0 10px rgba(255, 179, 0, 0.8), 0 0 20px rgba(255, 179, 0, 0.5);
+    }
+    75% {
+        color: #b388ff;
+        text-shadow: 0 0 10px rgba(179, 136, 255, 0.8), 0 0 20px rgba(179, 136, 255, 0.5);
+    }
+    100% {
+        color: #ff4081;
+        text-shadow: 0 0 10px rgba(255, 64, 129, 0.8), 0 0 20px rgba(255, 64, 129, 0.5);
+    }
+}
 
-        @keyframes marquee {
-            0% { transform: translateX(0%); }
-            100% { transform: translateX(-50%); }
-        }
+@keyframes marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-50%); }
+}
 
         .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 20px; max-width: 1000px; margin: 0 auto 60px; padding: 0 20px; width: 100%; }
         .feature-card { background: var(--card-bg); border: 1px solid var(--card-border); border-radius: 10px; padding: 24px; }
