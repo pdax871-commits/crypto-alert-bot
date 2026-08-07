@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CryptoPulse AI | Intelligent Trading Terminal</title>
+    <title>CryptoPulse AI | Private Terminal</title>
     <script src="https://unpkg.com/lightweight-charts@3.8.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
         :root {
@@ -14,61 +14,56 @@
             --text-muted: #848e9c;
             --accent-green: #0ecb81;
             --accent-red: #f6465d;
-            --accent-blue: #2962ff;
             --accent-glow: rgba(14, 203, 129, 0.2);
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
         html, body { width: 100%; height: 100%; overflow: hidden; background-color: var(--bg-color); color: var(--text-color); }
 
-        /* --- SCREEN VISIBILITY TOGGLES --- */
         .screen { width: 100vw; height: 100vh; display: none; flex-direction: column; }
         .screen.active { display: flex; }
 
+        /* --- AUTH LOCK SCREEN --- */
+        #auth-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(11, 14, 20, 0.95); backdrop-filter: blur(10px); display: flex; justify-content: center; align-items: center; z-index: 9999; }
+        .auth-card { background: var(--card-bg); border: 1px solid var(--border-color); padding: 40px; border-radius: 12px; width: 360px; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+        .auth-card h2 { color: #fff; margin-bottom: 8px; font-size: 22px; }
+        .auth-card p { color: var(--text-muted); font-size: 13px; margin-bottom: 24px; }
+        .auth-card input { width: 100%; padding: 12px; background: var(--bg-color); border: 1px solid var(--border-color); color: #fff; border-radius: 6px; font-size: 16px; text-align: center; margin-bottom: 16px; outline: none; }
+        .auth-card button { width: 100%; padding: 12px; background: var(--accent-green); color: #000; font-weight: bold; border: none; border-radius: 6px; cursor: pointer; font-size: 15px; }
+
         /* --- LANDING PAGE STYLES --- */
         #landing-screen { overflow-y: auto; background: radial-gradient(circle at top right, #1a2235 0%, #0b0e14 60%); }
-        
         .navbar { display: flex; justify-content: space-between; align-items: center; padding: 20px 40px; border-bottom: 1px solid var(--border-color); background: rgba(21, 25, 34, 0.8); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; }
-        .brand-logo { font-size: 22px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px; letter-spacing: 0.5px; }
+        .brand-logo { font-size: 22px; font-weight: 800; color: #fff; display: flex; align-items: center; gap: 8px; }
         .brand-logo span { color: var(--accent-green); }
         .nav-links { display: flex; gap: 24px; align-items: center; }
-        .nav-link { color: var(--text-muted); text-decoration: none; font-weight: 500; transition: 0.3s; cursor: pointer; }
-        .nav-link:hover { color: #fff; }
-        .btn-launch-nav { background: var(--accent-green); color: #000; padding: 10px 20px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; transition: 0.3s; box-shadow: 0 0 15px var(--accent-glow); }
-        .btn-launch-nav:hover { transform: translateY(-2px); box-shadow: 0 0 25px rgba(14, 203, 129, 0.4); }
+        .nav-link { color: var(--text-muted); cursor: pointer; font-weight: 500; }
+        .btn-launch-nav { background: var(--accent-green); color: #000; padding: 10px 20px; font-weight: 700; border-radius: 6px; border: none; cursor: pointer; }
 
-        .hero-section { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 80px 20px 40px; max-width: 900px; margin: 0 auto; }
-        .badge-tag { background: rgba(14, 203, 129, 0.1); color: var(--accent-green); border: 1px solid rgba(14, 203, 129, 0.3); padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 24px; }
-        .hero-title { font-size: 48px; font-weight: 800; line-height: 1.2; color: #fff; margin-bottom: 20px; }
+        .hero-section { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 60px 20px 30px; max-width: 900px; margin: 0 auto; }
+        .badge-tag { background: rgba(14, 203, 129, 0.1); color: var(--accent-green); border: 1px solid rgba(14, 203, 129, 0.3); padding: 6px 16px; border-radius: 20px; font-size: 13px; font-weight: 600; margin-bottom: 20px; }
+        .hero-title { font-size: 44px; font-weight: 800; color: #fff; margin-bottom: 16px; }
         .hero-title span { background: linear-gradient(135deg, #0ecb81 0%, #00f2fe 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .hero-subtitle { font-size: 18px; color: var(--text-muted); line-height: 1.6; margin-bottom: 36px; max-width: 680px; }
-        .cta-group { display: flex; gap: 16px; justify-content: center; margin-bottom: 60px; }
-        .btn-primary-cta { background: linear-gradient(135deg, #0ecb81 0%, #00b0ff 100%); color: #000; font-size: 18px; font-weight: 800; padding: 16px 36px; border-radius: 8px; border: none; cursor: pointer; transition: 0.3s; box-shadow: 0 10px 30px var(--accent-glow); }
-        .btn-primary-cta:hover { transform: translateY(-3px); box-shadow: 0 15px 40px rgba(14, 203, 129, 0.5); }
+        .hero-subtitle { font-size: 16px; color: var(--text-muted); margin-bottom: 30px; max-width: 650px; }
+        
+        .quote-banner { background: var(--card-bg); border-y: 1px solid var(--border-color); padding: 16px; text-align: center; color: var(--accent-green); font-weight: 600; font-style: italic; margin-bottom: 40px; }
 
-        .ticker-strip { width: 100%; border-y: 1px solid var(--border-color); background: var(--card-bg); padding: 14px 0; margin-bottom: 80px; display: flex; justify-content: center; gap: 40px; }
-        .ticker-item { display: flex; align-items: center; gap: 12px; font-weight: 600; }
-        .ticker-symbol { color: #fff; }
-        .ticker-price { color: var(--text-color); }
-        .ticker-change { padding: 2px 8px; border-radius: 4px; font-size: 12px; }
-        .ticker-change.up { background: rgba(14, 203, 129, 0.15); color: var(--accent-green); }
+        .cta-group { display: flex; gap: 16px; justify-content: center; margin-bottom: 40px; }
+        .btn-primary-cta { background: linear-gradient(135deg, #0ecb81 0%, #00b0ff 100%); color: #000; font-size: 18px; font-weight: 800; padding: 14px 32px; border-radius: 8px; border: none; cursor: pointer; }
 
-        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px; max-width: 1100px; margin: 0 auto 80px; padding: 0 20px; width: 100%; }
-        .feature-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 32px; transition: 0.3s; }
-        .feature-card:hover { border-color: var(--accent-green); transform: translateY(-5px); }
-        .feature-icon { font-size: 32px; margin-bottom: 16px; }
-        .feature-card h3 { color: #fff; font-size: 20px; margin-bottom: 12px; }
-        .feature-card p { color: var(--text-muted); font-size: 14px; line-height: 1.6; }
+        .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; max-width: 1100px; margin: 0 auto 60px; padding: 0 20px; width: 100%; }
+        .feature-card { background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 12px; padding: 24px; }
+        .feature-card h3 { color: #fff; font-size: 18px; margin-bottom: 10px; }
+        .feature-card p { color: var(--text-muted); font-size: 14px; line-height: 1.5; }
 
         /* --- CHART TERMINAL STYLES --- */
         header { display: flex; justify-content: space-between; align-items: center; padding: 0 20px; background-color: var(--card-bg); border-bottom: 1px solid var(--border-color); height: 60px; }
         .top-left, .top-right { display: flex; align-items: center; gap: 12px; }
 
-        .nav-back-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-color); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; margin-right: 8px; }
-        .nav-back-btn:hover { border-color: var(--text-color); }
+        .nav-back-btn { background: transparent; border: 1px solid var(--border-color); color: var(--text-color); padding: 6px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; }
 
-        .status-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; color: white; transition: 0.3s; }
-        .status-btn.active { background-color: var(--accent-green); box-shadow: 0 0 10px var(--accent-glow); }
+        .status-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: none; cursor: pointer; color: white; }
+        .status-btn.active { background-color: var(--accent-green); }
         .status-btn.inactive { background-color: var(--accent-red); }
 
         .action-btn { padding: 8px 16px; font-weight: bold; border-radius: 4px; border: 1px solid var(--border-color); background-color: var(--card-bg); color: var(--text-color); cursor: pointer; }
@@ -79,70 +74,75 @@
         #chart { width: 100%; height: 100%; display: block; }
 
         /* --- MODALS & TOASTS --- */
-        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 2000; backdrop-filter: blur(4px); }
-        .modal-content { background-color: var(--card-bg); width: 450px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+        .modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.7); display: none; justify-content: center; align-items: center; z-index: 2000; }
+        .modal-content { background-color: var(--card-bg); width: 450px; border-radius: 8px; border: 1px solid var(--border-color); display: flex; flex-direction: column; padding: 20px; }
         .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; }
         .modal-body { overflow-y: auto; display: flex; flex-direction: column; gap: 12px; max-height: 50vh; }
 
         .alert-card { background-color: var(--bg-color); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); display: flex; justify-content: space-between; align-items: center; }
         .alert-card .del-btn { background-color: var(--accent-red); color: white; border: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; }
 
-        #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; box-shadow: 0 4px 10px rgba(0,0,0,0.4); }
+        #context-menu { position: absolute; display: none; background: var(--card-bg); border: 1px solid var(--border-color); border-radius: 4px; z-index: 1000; }
         #context-menu button { display: block; width: 100%; border: none; text-align: left; padding: 10px 15px; cursor: pointer; }
 
         #toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 3000; display: flex; flex-direction: column; gap: 10px; }
-        .toast { background-color: var(--accent-green); color: black; padding: 12px 20px; border-radius: 6px; font-weight: bold; box-shadow: 0 4px 12px rgba(0,0,0,0.4); animation: slideIn 0.3s ease-out; }
-        @keyframes slideIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+        .toast { background-color: var(--accent-green); color: black; padding: 12px 20px; border-radius: 6px; font-weight: bold; }
     </style>
 </head>
 <body>
 
-    <!-- ================= 1. LANDING SCREEN ================= -->
+    <!-- AUTH LOCK OVERLAY -->
+    <div id="auth-overlay">
+        <div class="auth-card">
+            <h2>🔒 Access Locked</h2>
+            <p>Enter Admin Password to access terminal</p>
+            <input type="password" id="admin-pass-input" placeholder="Enter Password" onkeydown="if(event.key==='Enter') authenticate()" />
+            <button onclick="authenticate()">Unlock Dashboard</button>
+            <p id="auth-error" style="color: var(--accent-red); font-size: 12px; margin-top: 10px; display: none;">Invalid Password!</p>
+        </div>
+    </div>
+
+    <!-- LANDING SCREEN -->
     <div id="landing-screen" class="screen active">
         <nav class="navbar">
             <div class="brand-logo">⚡ CRYPTO<span>PULSE</span></div>
             <div class="nav-links">
                 <span class="nav-link" onclick="openTerminal()">Terminal</span>
-                <span class="nav-link" onclick="scrollToFeatures()">Features</span>
                 <button class="btn-launch-nav" onclick="openTerminal()">Launch Terminal 🚀</button>
+                <button onclick="logout()" style="background: transparent; color: var(--accent-red); border:1px solid var(--accent-red); cursor:pointer;">Lock 🔒</button>
             </div>
         </nav>
 
         <section class="hero-section">
-            <div class="badge-tag">24/7 Automated Alert Engine</div>
-            <h1 class="hero-title">Precision Trading Alerts for <span>Crypto Markets</span></h1>
-            <p class="hero-subtitle">Real-time 9-20 EMA Crossovers, 200 EMA Touches, and Custom Level Alerts powered by server-side background scanning and instant Telegram sync.</p>
+            <div class="badge-tag">Private Alert Suite</div>
+            <h1 class="hero-title">Disciplined <span>Technical Analysis</span> Dashboard</h1>
+            <p class="hero-subtitle">Server-side automated 9-20 EMA Cross & 200 EMA Touch monitoring integrated with instant Telegram alerts.</p>
             <div class="cta-group">
                 <button class="btn-primary-cta" onclick="openTerminal()">Open Chart Terminal 📈</button>
             </div>
         </section>
 
-        <div class="ticker-strip">
-            <div class="ticker-item"><span class="ticker-symbol">BTC/USDT</span> <span class="ticker-price">$65,294</span> <span class="ticker-change up">+2.4%</span></div>
-            <div class="ticker-item"><span class="ticker-symbol">ETH/USDT</span> <span class="ticker-price">$3,480</span> <span class="ticker-change up">+1.8%</span></div>
-            <div class="ticker-item"><span class="ticker-symbol">SOL/USDT</span> <span class="ticker-price">$148.50</span> <span class="ticker-change up">+5.2%</span></div>
+        <div class="quote-banner">
+            "Trade your system, not your emotions. If risk-reward is in your favor, the edge is yours."
         </div>
 
-        <section id="features" class="features-grid">
+        <section class="features-grid">
             <div class="feature-card">
-                <div class="feature-icon">📊</div>
                 <h3>EMA Crossover Engine</h3>
-                <p>Scans 9-20 EMA crossovers and 200 EMA touches strictly after candle closes to eliminate false signals.</p>
+                <p>Scans 9-20 EMA crossovers and 200 EMA touches strictly after candle closes.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon">📲</div>
                 <h3>Instant Telegram Sync</h3>
-                <p>Direct integration with Telegram API. Receive actionable alerts straight to your phone 24/7.</p>
+                <p>Direct integration with Telegram API for instant real-time alerts.</p>
             </div>
             <div class="feature-card">
-                <div class="feature-icon">🛡️</div>
-                <h3>Cloud Server Scanner</h3>
-                <p>Runs continuously via cloud pings. Your alerts remain active even if your browser is closed.</p>
+                <h3>24/7 Cloud Scanner</h3>
+                <p>Runs continuously in background even if your browser is closed.</p>
             </div>
         </section>
     </div>
 
-    <!-- ================= 2. CHART TERMINAL SCREEN ================= -->
+    <!-- CHART TERMINAL SCREEN -->
     <div id="terminal-screen" class="screen">
         <header>
             <div class="top-left">
@@ -178,7 +178,6 @@
         </div>
     </div>
 
-    <!-- TOAST NOTIFICATIONS & MODALS -->
     <div id="toast-container"></div>
 
     <div id="alerts-modal" class="modal-overlay">
@@ -230,7 +229,49 @@
     </div>
 
     <script>
-        // NAVIGATION HANDLERS
+        let adminPass = localStorage.getItem('adminPass') || '';
+
+        async function authenticate() {
+            const pwd = document.getElementById('admin-pass-input').value.trim();
+            const res = await fetch('/api/verify_auth', {
+                method: 'POST',
+                headers: { 'X-Admin-Password': pwd }
+            });
+
+            if (res.ok) {
+                adminPass = pwd;
+                localStorage.setItem('adminPass', pwd);
+                document.getElementById('auth-overlay').style.display = 'none';
+                document.getElementById('auth-error').style.display = 'none';
+                fetchServerAlerts();
+            } else {
+                document.getElementById('auth-error').style.display = 'block';
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('adminPass');
+            location.reload();
+        }
+
+        function checkStoredAuth() {
+            if (adminPass) {
+                fetch('/api/verify_auth', {
+                    method: 'POST',
+                    headers: { 'X-Admin-Password': adminPass }
+                }).then(res => {
+                    if (res.ok) {
+                        document.getElementById('auth-overlay').style.display = 'none';
+                        fetchServerAlerts();
+                    } else {
+                        document.getElementById('auth-overlay').style.display = 'flex';
+                    }
+                });
+            } else {
+                document.getElementById('auth-overlay').style.display = 'flex';
+            }
+        }
+
         function openTerminal() {
             document.getElementById('landing-screen').classList.remove('active');
             document.getElementById('terminal-screen').classList.add('active');
@@ -243,11 +284,6 @@
             document.getElementById('landing-screen').classList.add('active');
         }
 
-        function scrollToFeatures() {
-            document.getElementById('features').scrollIntoView({ behavior: 'smooth' });
-        }
-
-        // CHART LOGIC
         let currentSymbol = "BTCUSDT";
         let currentTF = "15m";
         let chart, candlestickSeries, ema9Series, ema20Series, ema200Series;
@@ -255,7 +291,6 @@
         let activeAlerts = [];
         let priceLineMap = {};
         let isFirstLoad = true;
-
         let lastCrossCandleTime = 0;
         let lastEma200TouchedTime = 0;
 
@@ -461,14 +496,14 @@
             if (isActive) {
                 await fetch('/api/delete_alert', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPass },
                     body: JSON.stringify({ type: type, symbol: currentSymbol, tf: currentTF })
                 });
                 showToast(`🔴 Alert Turned OFF for ${currentSymbol} (${currentTF})`);
             } else {
                 await fetch('/api/add_alert', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPass },
                     body: JSON.stringify({ type: type, symbol: currentSymbol, tf: currentTF, message: `${type.toUpperCase()} Alert Active` })
                 });
                 showToast(`🟢 Alert Activated for ${currentSymbol} (${currentTF})`);
@@ -499,7 +534,7 @@
 
             await fetch('/api/add_alert', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPass },
                 body: JSON.stringify({ type: 'price', symbol: currentSymbol, price: price, message: msg })
             });
 
@@ -521,7 +556,7 @@
         async function deleteSingleAlert(symbol, price) {
             await fetch('/api/delete_alert', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPass },
                 body: JSON.stringify({ type: 'price', symbol: symbol, price: price })
             });
             showToast(`🗑️ Alert removed for ${symbol} at $${price}`);
@@ -529,7 +564,10 @@
         }
 
         async function clearAllAlerts() {
-            await fetch('/api/clear_alerts', { method: 'POST' });
+            await fetch('/api/clear_alerts', { 
+                method: 'POST',
+                headers: { 'X-Admin-Password': adminPass }
+            });
             closeModal('alerts-modal');
             showToast(`🗑️ All horizontal alerts cleared`);
             fetchServerAlerts();
@@ -544,8 +582,15 @@
         }
 
         async function fetchServerAlerts() {
+            if (!adminPass) return;
             try {
-                const res = await fetch('/api/get_alerts');
+                const res = await fetch('/api/get_alerts', {
+                    headers: { 'X-Admin-Password': adminPass }
+                });
+                if (res.status === 401) {
+                    logout();
+                    return;
+                }
                 activeAlerts = await res.json();
 
                 const modalAlertsContainer = document.getElementById('modal-alerts-list');
@@ -591,7 +636,7 @@
         async function toggleSpecificEma(type, symbol, tf) {
             await fetch('/api/delete_alert', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'X-Admin-Password': adminPass },
                 body: JSON.stringify({ type: type, symbol: symbol, tf: tf })
             });
             showToast(`🔴 Alert Turned OFF for ${symbol} (${tf})`);
@@ -623,12 +668,12 @@
         }
 
         window.onload = async () => {
-            await fetchServerAlerts();
+            checkStoredAuth();
             setInterval(() => {
                 if(document.getElementById('terminal-screen').classList.contains('active')) {
                     loadChartData(false);
                 }
-                fetchServerAlerts();
+                if (adminPass) { fetchServerAlerts(); }
             }, 5000);
         };
     </script>
