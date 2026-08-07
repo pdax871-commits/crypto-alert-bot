@@ -2,13 +2,24 @@ import os
 import json
 import time
 import requests
+from functools import wraps
 from flask import Flask, render_template, request, jsonify
 
 app = Flask(__name__, template_folder='templates')
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "1234").strip()  # Set your password in Render
 ALERTS_FILE = "alerts.json"
+
+def require_auth(f):
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth_pass = request.headers.get("X-Admin-Password") or request.args.get("pass")
+        if auth_pass != ADMIN_PASSWORD:
+            return jsonify({"status": "unauthorized", "message": "Invalid Password"}), 401
+        return f(*args, **kwargs)
+    return decorated
 
 def load_alerts():
     if os.path.exists(ALERTS_FILE):
@@ -49,20 +60,17 @@ def calculate_ema(prices, period):
             ema_list.append(ema)
     return ema_list
 
-# 24x7 BACKGROUND SCAN ENGINE (UptimeRobot / Ping Triggered)
 def process_active_alerts():
     alerts = load_alerts()
     if not alerts: return []
     
     remaining = []
     triggered_any = False
-
     mexc_tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "60m", "4h": "4h"}
 
     for a in alerts:
         sym = a.get('symbol', '').upper()
         
-        # 1. HANDLE 9-20 EMA CROSSOVER ALERTS IN BACKGROUND
         if a.get('type') == 'ema_9_20':
             tf_str = a.get('tf', '15m')
             tf_mexc = mexc_tf_map.get(tf_str, '15m')
@@ -76,7 +84,6 @@ def process_active_alerts():
                         ema9 = calculate_ema(closes, 9)
                         ema20 = calculate_ema(closes, 20)
 
-                        # Closed Candle Index -2 and Previous Index -3
                         closed_ema9 = ema9[-2]
                         closed_ema20 = ema20[-2]
                         prev_ema9 = ema9[-3]
@@ -99,7 +106,6 @@ def process_active_alerts():
                 print(f"EMA Scan Error for {sym}: {e}")
             remaining.append(a)
 
-        # 2. HANDLE 200 EMA TOUCH ALERTS IN BACKGROUND
         elif a.get('type') == 'ema_200':
             tf_str = a.get('tf', '15m')
             tf_mexc = mexc_tf_map.get(tf_str, '15m')
@@ -129,7 +135,6 @@ def process_active_alerts():
                 print(f"200 EMA Scan Error for {sym}: {e}")
             remaining.append(a)
 
-        # 3. HANDLE HORIZONTAL PRICE ALERTS
         else:
             target = float(a.get('price', 0))
             created_at_ms = a.get('created_at', 0)
@@ -164,11 +169,15 @@ def ping():
     remaining = process_active_alerts()
     return jsonify({"status": "awake", "active_alerts": len(remaining)})
 
+@app.route('/api/verify_auth', methods=['POST'])
+@require_auth
+def verify_auth():
+    return jsonify({"status": "authorized"})
+
 @app.route('/api/klines')
 def get_klines():
     symbol = request.args.get('symbol', 'BTCUSDT').upper()
     interval = request.args.get('interval', '15m')
-    
     mexc_tf_map = {"1m": "1m", "5m": "5m", "15m": "15m", "1h": "60m", "4h": "4h"}
     tf = mexc_tf_map.get(interval, "15m")
     
@@ -179,10 +188,10 @@ def get_klines():
             return jsonify(res.json())
     except Exception as e:
         print(f"Klines Error: {e}")
-        
     return jsonify([])
 
 @app.route('/api/get_alerts', methods=['GET'])
+@require_auth
 def get_alerts():
     process_active_alerts()
     return jsonify(load_alerts())
@@ -193,6 +202,7 @@ def index():
     return render_template('index.html')
 
 @app.route('/api/add_alert', methods=['POST'])
+@require_auth
 def add_alert():
     data = request.json
     try:
@@ -201,7 +211,6 @@ def add_alert():
         server_time_ms = int(time.time() * 1000)
         
     data['created_at'] = server_time_ms
-    
     alerts = load_alerts()
     if data.get('type') in ['ema_9_20', 'ema_200']:
         alerts = [a for a in alerts if not (a.get('type') == data.get('type') and a.get('symbol') == data.get('symbol') and a.get('tf') == data.get('tf'))]
@@ -222,6 +231,7 @@ def trigger_alert():
     return jsonify({"status": "triggered"})
 
 @app.route('/api/delete_alert', methods=['POST'])
+@require_auth
 def delete_alert():
     data = request.json
     alerts = load_alerts()
@@ -237,6 +247,7 @@ def delete_alert():
     return jsonify({"status": "deleted", "alerts": alerts})
 
 @app.route('/api/clear_alerts', methods=['POST'])
+@require_auth
 def clear_alerts():
     save_alerts([])
     return jsonify({"status": "cleared"})
