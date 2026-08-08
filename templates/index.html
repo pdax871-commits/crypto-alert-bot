@@ -797,8 +797,8 @@
             checkStoredAuth();
             updateRotatingQuotes();
             // Rotate Quotes Every 30 Minutes (1800000 ms)
-           // setInterval(updateRotatingQuotes, 1800000);
-            setInterval(updateRotatingQuotes, 60000);
+          
+            setInterval(updateRotatingQuotes, 900000);
 
             setInterval(() => {
                 if(document.getElementById('terminal-screen').classList.contains('active')) {
