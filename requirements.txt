@@ -1,11 +1,4 @@
-fastapi
-uvicorn
-requests
-jinja2
-pydantic
-pandas
-ta
 flask
-gunicorn
 requests
-google-genai
+gunicorn
+google-generativeai
