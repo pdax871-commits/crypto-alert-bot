@@ -1,16 +1,29 @@
 import os
 import json
 import time
+import threading
 import requests
 from functools import wraps
 from flask import Flask, render_template, request, jsonify
+from google import genai
 
 app = Flask(__name__, template_folder='templates')
 
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "1234").strip()  # Set your password in Render
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "1234").strip()
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+
 ALERTS_FILE = "alerts.json"
+NEWS_CACHE_FILE = "news_cache.json"
+
+# Initialize Gemini Client if API key is present
+ai_client = None
+if GEMINI_API_KEY:
+    try:
+        ai_client = genai.Client(api_key=GEMINI_API_KEY)
+    except Exception as e:
+        print(f"[GEMINI INIT ERROR]: {e}")
 
 def require_auth(f):
     @wraps(f)
@@ -21,29 +34,31 @@ def require_auth(f):
         return f(*args, **kwargs)
     return decorated
 
-def load_alerts():
-    if os.path.exists(ALERTS_FILE):
+def load_json(filepath):
+    if os.path.exists(filepath):
         try:
-            with open(ALERTS_FILE, "r") as f: 
+            with open(filepath, "r") as f:
                 return json.load(f)
-        except: pass
+        except Exception:
+            pass
     return []
 
-def save_alerts(alerts):
+def save_json(filepath, data):
     try:
-        with open(ALERTS_FILE, "w") as f: 
-            json.dump(alerts, f)
-    except: pass
+        with open(filepath, "w") as f:
+            json.dump(data, f)
+    except Exception as e:
+        print(f"[SAVE ERROR]: {e}")
 
 def send_telegram_alert(msg):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID: 
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
         print(f"[TELEGRAM NOT CONFIGURED]: {msg}")
         return
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try: 
+    try:
         requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=5)
     except Exception as e:
-        print(f"Telegram Error: {e}")
+        print(f"[TELEGRAM ERROR]: {e}")
 
 def calculate_ema(prices, period):
     if len(prices) < period:
@@ -60,8 +75,126 @@ def calculate_ema(prices, period):
             ema_list.append(ema)
     return ema_list
 
+# ================= AI NEWS ANALYSIS ENGINE =================
+def analyze_news_with_ai(title, source=""):
+    if not ai_client:
+        # Fallback if AI key is missing
+        return {
+            "sentiment": "NEUTRAL",
+            "impact": "MEDIUM",
+            "summary": "General market news update."
+        }
+    
+    prompt = f"""
+Act as an elite crypto market analyst. Analyze this news headline and determine its market sentiment, impact level, and a concise 1-sentence summary for traders.
+
+Headline: "{title}"
+Source: "{source}"
+
+Return ONLY a valid JSON object matching this exact structure:
+{{
+  "sentiment": "BULLISH" | "BEARISH" | "NEUTRAL",
+  "impact": "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH",
+  "summary": "One sentence explanation of market effect."
+}}
+"""
+    try:
+        response = ai_client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+        )
+        text = response.text.strip()
+        if "```json" in text:
+            text = text.split("```json")[1].split("```")[0].strip()
+        elif "```" in text:
+            text = text.split("```")[1].split("```")[0].strip()
+            
+        parsed = json.loads(text)
+        return {
+            "sentiment": parsed.get("sentiment", "NEUTRAL").upper(),
+            "impact": parsed.get("impact", "MEDIUM").upper(),
+            "summary": parsed.get("summary", "Market news update.")
+        }
+    except Exception as e:
+        print(f"[AI ANALYSIS ERROR]: {e}")
+        return {
+            "sentiment": "NEUTRAL",
+            "impact": "MEDIUM",
+            "summary": title
+        }
+
+def fetch_and_process_news():
+    url = "https://cryptopanic.com/api/v1/posts/?auth_token=free&public=true"
+    cached_news = load_json(NEWS_CACHE_FILE)
+    existing_ids = {item.get("id") for item in cached_news if "id" in item}
+    
+    try:
+        res = requests.get(url, timeout=6)
+        if res.status_code == 200:
+            posts = res.json().get("results", [])
+            new_analyzed = []
+            
+            for post in posts[:10]: # Process top 10 latest news
+                post_id = post.get("id")
+                if post_id in existing_ids:
+                    continue
+                
+                title = post.get("title", "")
+                domain = post.get("domain", "CryptoPanic")
+                published_at = post.get("published_at", "")
+                
+                # Analyze via Gemini AI
+                ai_result = analyze_news_with_ai(title, domain)
+                
+                news_item = {
+                    "id": post_id,
+                    "title": title,
+                    "source": domain,
+                    "published_at": published_at,
+                    "sentiment": ai_result["sentiment"],
+                    "impact": ai_result["impact"],
+                    "summary": ai_result["summary"],
+                    "timestamp": int(time.time())
+                }
+                
+                new_analyzed.append(news_item)
+                
+                # Trigger Telegram Alert if VERY HIGH impact
+                if ai_result["impact"] == "VERY_HIGH":
+                    emoji = "🟢" if ai_result["sentiment"] == "BULLISH" else "🔴" if ai_result["sentiment"] == "BEARISH" else "⚪"
+                    msg = (
+                        f"🚨 *VERY HIGH IMPACT NEWS ALERT* 🚨\n\n"
+                        f"📰 *{title}*\n"
+                        f"Sentiment: {emoji} *{ai_result['sentiment']}*\n"
+                        f"Impact: ⚡ *VERY HIGH*\n\n"
+                        f"📝 *AI Summary:* {ai_result['summary']}\n"
+                        f"Source: {domain}"
+                    )
+                    send_telegram_alert(msg)
+            
+            if new_analyzed:
+                updated_cache = new_analyzed + cached_news
+                updated_cache = updated_cache[:40] # Keep last 40 news items
+                save_json(NEWS_CACHE_FILE, updated_cache)
+                print(f"[NEWS SCANNED]: Added {len(new_analyzed)} new AI-analyzed news items.")
+    except Exception as e:
+        print(f"[NEWS SCANNED ERROR]: {e}")
+
+# Background Scanner Loop (Runs every 3 minutes)
+def background_news_loop():
+    while True:
+        try:
+            fetch_and_process_news()
+        except Exception as e:
+            print(f"[BACKGROUND NEWS LOOP ERROR]: {e}")
+        time.sleep(180)
+
+# Start Background Thread
+news_thread = threading.Thread(target=background_news_loop, daemon=True)
+news_thread.start()
+
 def process_active_alerts():
-    alerts = load_alerts()
+    alerts = load_json(ALERTS_FILE)
     if not alerts: return []
     
     remaining = []
@@ -160,7 +293,7 @@ def process_active_alerts():
                 remaining.append(a)
 
     if triggered_any:
-        save_alerts(remaining)
+        save_json(ALERTS_FILE, remaining)
         
     return remaining
 
@@ -173,6 +306,11 @@ def ping():
 @require_auth
 def verify_auth():
     return jsonify({"status": "authorized"})
+
+@app.route('/api/get_news', methods=['GET'])
+def get_news():
+    news = load_json(NEWS_CACHE_FILE)
+    return jsonify(news)
 
 @app.route('/api/klines')
 def get_klines():
@@ -194,7 +332,7 @@ def get_klines():
 @require_auth
 def get_alerts():
     process_active_alerts()
-    return jsonify(load_alerts())
+    return jsonify(load_json(ALERTS_FILE))
 
 @app.route('/')
 @app.route('/index')
@@ -207,16 +345,16 @@ def add_alert():
     data = request.json
     try:
         server_time_ms = requests.get("https://api.mexc.com/api/v3/time", timeout=3).json()['serverTime']
-    except:
+    except Exception:
         server_time_ms = int(time.time() * 1000)
         
     data['created_at'] = server_time_ms
-    alerts = load_alerts()
+    alerts = load_json(ALERTS_FILE)
     if data.get('type') in ['ema_9_20', 'ema_200']:
         alerts = [a for a in alerts if not (a.get('type') == data.get('type') and a.get('symbol') == data.get('symbol') and a.get('tf') == data.get('tf'))]
     
     alerts.append(data)
-    save_alerts(alerts)
+    save_json(ALERTS_FILE, alerts)
     return jsonify({"status": "success", "alerts": alerts})
 
 @app.route('/api/trigger_alert', methods=['POST'])
@@ -234,7 +372,7 @@ def trigger_alert():
 @require_auth
 def delete_alert():
     data = request.json
-    alerts = load_alerts()
+    alerts = load_json(ALERTS_FILE)
     
     if data.get('type') in ['ema_9_20', 'ema_200']:
         alerts = [a for a in alerts if not (a.get('type') == data.get('type') and a.get('symbol') == data.get('symbol') and a.get('tf') == data.get('tf'))]
@@ -243,13 +381,13 @@ def delete_alert():
         price = float(data.get('price', 0))
         alerts = [a for a in alerts if not (a.get('symbol', '').lower() == sym.lower() and abs(float(a.get('price', 0)) - price) < 0.0001)]
         
-    save_alerts(alerts)
+    save_json(ALERTS_FILE, alerts)
     return jsonify({"status": "deleted", "alerts": alerts})
 
 @app.route('/api/clear_alerts', methods=['POST'])
 @require_auth
 def clear_alerts():
-    save_alerts([])
+    save_json(ALERTS_FILE, [])
     return jsonify({"status": "cleared"})
 
 if __name__ == '__main__':
