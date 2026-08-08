@@ -3,6 +3,7 @@ import json
 import time
 import threading
 import requests
+import xml.etree.ElementTree as ET
 from functools import wraps
 from flask import Flask, render_template, request, jsonify
 import google.generativeai as genai
@@ -110,9 +111,9 @@ Return ONLY a valid JSON object matching this exact structure:
             
         parsed = json.loads(text)
         return {
-            "sentiment": parsed.get("sentiment", "NEUTRAL").upper(),
-            "impact": parsed.get("impact", "MEDIUM").upper(),
-            "summary": parsed.get("summary", "Market news update.")
+            "sentiment": str(parsed.get("sentiment", "NEUTRAL")).upper(),
+            "impact": str(parsed.get("impact", "MEDIUM")).upper(),
+            "summary": str(parsed.get("summary", "Market news update."))
         }
     except Exception as e:
         print(f"[AI ANALYSIS ERROR]: {e}")
@@ -122,68 +123,109 @@ Return ONLY a valid JSON object matching this exact structure:
             "summary": title
         }
 
-def fetch_and_process_news():
-    url = "https://cryptopanic.com/api/v1/posts/?auth_token=free&public=true"
-    cached_news = load_json(NEWS_CACHE_FILE)
-    existing_ids = {item.get("id") for item in cached_news if "id" in item}
+def fetch_raw_news():
+    items = []
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
+    }
     
+    # Primary Source: CryptoPanic Public API
     try:
-        res = requests.get(url, timeout=6)
+        url = "https://cryptopanic.com/api/v1/posts/?auth_token=free&public=true"
+        res = requests.get(url, headers=headers, timeout=6)
         if res.status_code == 200:
             posts = res.json().get("results", [])
-            new_analyzed = []
-            
-            for post in posts[:10]:
-                post_id = post.get("id")
-                if post_id in existing_ids:
-                    continue
-                
-                title = post.get("title", "")
-                domain = post.get("domain", "CryptoPanic")
-                published_at = post.get("published_at", "")
-                
-                ai_result = analyze_news_with_ai(title, domain)
-                
-                news_item = {
-                    "id": post_id,
-                    "title": title,
-                    "source": domain,
-                    "published_at": published_at,
-                    "sentiment": ai_result["sentiment"],
-                    "impact": ai_result["impact"],
-                    "summary": ai_result["summary"],
-                    "timestamp": int(time.time())
-                }
-                
-                new_analyzed.append(news_item)
-                
-                if ai_result["impact"] == "VERY_HIGH":
-                    emoji = "🟢" if ai_result["sentiment"] == "BULLISH" else "🔴" if ai_result["sentiment"] == "BEARISH" else "⚪"
-                    msg = (
-                        f"🚨 *VERY HIGH IMPACT NEWS ALERT* 🚨\n\n"
-                        f"📰 *{title}*\n"
-                        f"Sentiment: {emoji} *{ai_result['sentiment']}*\n"
-                        f"Impact: ⚡ *VERY HIGH*\n\n"
-                        f"📝 *AI Summary:* {ai_result['summary']}\n"
-                        f"Source: {domain}"
-                    )
-                    send_telegram_alert(msg)
-            
-            if new_analyzed:
-                updated_cache = new_analyzed + cached_news
-                updated_cache = updated_cache[:40]
-                save_json(NEWS_CACHE_FILE, updated_cache)
-                print(f"[NEWS SCANNED]: Added {len(new_analyzed)} new AI-analyzed news items.")
+            for p in posts[:12]:
+                items.append({
+                    "id": f"cp_{p.get('id')}",
+                    "title": p.get("title", ""),
+                    "source": p.get("domain", "CryptoPanic")
+                })
     except Exception as e:
-        print(f"[NEWS SCANNED ERROR]: {e}")
+        print(f"[CRYPTOPANIC FETCH ERROR]: {e}")
+
+    # Backup Source: CoinTelegraph RSS Feed (Guarantees fresh news 24/7)
+    if len(items) < 5:
+        try:
+            rss_url = "https://cointelegraph.com/rss"
+            res = requests.get(rss_url, headers=headers, timeout=6)
+            if res.status_code == 200:
+                root = ET.fromstring(res.content)
+                for item in root.findall('./channel/item')[:12]:
+                    title = item.find('title').text if item.find('title') is not None else ""
+                    guid = item.find('guid').text if item.find('guid') is not None else title
+                    if title:
+                        items.append({
+                            "id": f"ct_{hash(guid)}",
+                            "title": title,
+                            "source": "CoinTelegraph"
+                        })
+        except Exception as e:
+            print(f"[RSS FETCH ERROR]: {e}")
+            
+    return items
+
+def fetch_and_process_news():
+    raw_posts = fetch_raw_news()
+    if not raw_posts:
+        print("[NEWS SCANNER]: No raw news fetched from sources.")
+        return
+
+    cached_news = load_json(NEWS_CACHE_FILE)
+    existing_ids = {item.get("id") for item in cached_news if "id" in item}
+    new_analyzed = []
+    
+    for post in raw_posts:
+        post_id = post.get("id")
+        if post_id in existing_ids:
+            continue
+        
+        title = post.get("title", "")
+        domain = post.get("source", "Crypto Panic")
+        
+        ai_result = analyze_news_with_ai(title, domain)
+        
+        news_item = {
+            "id": post_id,
+            "title": title,
+            "source": domain,
+            "sentiment": ai_result["sentiment"],
+            "impact": ai_result["impact"],
+            "summary": ai_result["summary"],
+            "timestamp": int(time.time())
+        }
+        
+        new_analyzed.append(news_item)
+        
+        # Trigger Telegram Alert if VERY HIGH impact
+        if ai_result["impact"] == "VERY_HIGH":
+            emoji = "🟢" if ai_result["sentiment"] == "BULLISH" else "🔴" if ai_result["sentiment"] == "BEARISH" else "⚪"
+            msg = (
+                f"🚨 *VERY HIGH IMPACT NEWS ALERT* 🚨\n\n"
+                f"📰 *{title}*\n"
+                f"Sentiment: {emoji} *{ai_result['sentiment']}*\n"
+                f"Impact: ⚡ *VERY HIGH*\n\n"
+                f"📝 *AI Summary:* {ai_result['summary']}\n"
+                f"Source: {domain}"
+            )
+            send_telegram_alert(msg)
+
+    if new_analyzed:
+        updated_cache = new_analyzed + cached_news
+        updated_cache = updated_cache[:50] # Store last 50 processed news
+        save_json(NEWS_CACHE_FILE, updated_cache)
+        print(f"[NEWS SCANNED]: Successfully added {len(new_analyzed)} AI analyzed news items.")
 
 def background_news_loop():
+    # Initial scan on startup
+    time.sleep(3)
+    fetch_and_process_news()
     while True:
         try:
             fetch_and_process_news()
         except Exception as e:
             print(f"[BACKGROUND NEWS LOOP ERROR]: {e}")
-        time.sleep(180)
+        time.sleep(120) # Scan every 2 minutes
 
 news_thread = threading.Thread(target=background_news_loop, daemon=True)
 news_thread.start()
@@ -305,6 +347,10 @@ def verify_auth():
 @app.route('/api/get_news', methods=['GET'])
 def get_news():
     news = load_json(NEWS_CACHE_FILE)
+    # If cache is empty on first hit, run sync fetch
+    if not news:
+        fetch_and_process_news()
+        news = load_json(NEWS_CACHE_FILE)
     return jsonify(news)
 
 @app.route('/api/klines')
@@ -386,4 +432,5 @@ def clear_alerts():
     return jsonify({"status": "cleared"})
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
