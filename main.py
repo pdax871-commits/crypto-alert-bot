@@ -5,7 +5,7 @@ import threading
 import requests
 from functools import wraps
 from flask import Flask, render_template, request, jsonify
-from google import genai
+import google.generativeai as genai
 
 app = Flask(__name__, template_folder='templates')
 
@@ -17,11 +17,12 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 ALERTS_FILE = "alerts.json"
 NEWS_CACHE_FILE = "news_cache.json"
 
-# Initialize Gemini Client if API key is present
-ai_client = None
+# Initialize Gemini AI Config
+ai_configured = False
 if GEMINI_API_KEY:
     try:
-        ai_client = genai.Client(api_key=GEMINI_API_KEY)
+        genai.configure(api_key=GEMINI_API_KEY)
+        ai_configured = True
     except Exception as e:
         print(f"[GEMINI INIT ERROR]: {e}")
 
@@ -77,8 +78,7 @@ def calculate_ema(prices, period):
 
 # ================= AI NEWS ANALYSIS ENGINE =================
 def analyze_news_with_ai(title, source=""):
-    if not ai_client:
-        # Fallback if AI key is missing
+    if not ai_configured:
         return {
             "sentiment": "NEUTRAL",
             "impact": "MEDIUM",
@@ -99,11 +99,10 @@ Return ONLY a valid JSON object matching this exact structure:
 }}
 """
     try:
-        response = ai_client.models.generate_content(
-            model='gemini-2.5-flash',
-            contents=prompt,
-        )
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
         text = response.text.strip()
+        
         if "```json" in text:
             text = text.split("```json")[1].split("```")[0].strip()
         elif "```" in text:
@@ -134,7 +133,7 @@ def fetch_and_process_news():
             posts = res.json().get("results", [])
             new_analyzed = []
             
-            for post in posts[:10]: # Process top 10 latest news
+            for post in posts[:10]:
                 post_id = post.get("id")
                 if post_id in existing_ids:
                     continue
@@ -143,7 +142,6 @@ def fetch_and_process_news():
                 domain = post.get("domain", "CryptoPanic")
                 published_at = post.get("published_at", "")
                 
-                # Analyze via Gemini AI
                 ai_result = analyze_news_with_ai(title, domain)
                 
                 news_item = {
@@ -159,7 +157,6 @@ def fetch_and_process_news():
                 
                 new_analyzed.append(news_item)
                 
-                # Trigger Telegram Alert if VERY HIGH impact
                 if ai_result["impact"] == "VERY_HIGH":
                     emoji = "🟢" if ai_result["sentiment"] == "BULLISH" else "🔴" if ai_result["sentiment"] == "BEARISH" else "⚪"
                     msg = (
@@ -174,13 +171,12 @@ def fetch_and_process_news():
             
             if new_analyzed:
                 updated_cache = new_analyzed + cached_news
-                updated_cache = updated_cache[:40] # Keep last 40 news items
+                updated_cache = updated_cache[:40]
                 save_json(NEWS_CACHE_FILE, updated_cache)
                 print(f"[NEWS SCANNED]: Added {len(new_analyzed)} new AI-analyzed news items.")
     except Exception as e:
         print(f"[NEWS SCANNED ERROR]: {e}")
 
-# Background Scanner Loop (Runs every 3 minutes)
 def background_news_loop():
     while True:
         try:
@@ -189,7 +185,6 @@ def background_news_loop():
             print(f"[BACKGROUND NEWS LOOP ERROR]: {e}")
         time.sleep(180)
 
-# Start Background Thread
 news_thread = threading.Thread(target=background_news_loop, daemon=True)
 news_thread.start()
 
